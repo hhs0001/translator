@@ -1,5 +1,6 @@
-use reqwest::Client;
+use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
+
 
 /// Configuração do cliente LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -7,7 +8,10 @@ pub struct LlmConfig {
     pub endpoint: String,
     pub api_key: String,
     pub model: String,
+    #[serde(default)]
+    pub headers: Vec<(String, String)>,
 }
+
 
 impl Default for LlmConfig {
     fn default() -> Self {
@@ -15,26 +19,48 @@ impl Default for LlmConfig {
             endpoint: "http://localhost:8317/v1/chat/completions".to_string(),
             api_key: "dummy".to_string(),
             model: "gemini-2.5-pro".to_string(),
+            headers: Vec::new(),
         }
     }
 }
 
+fn normalize_endpoint(endpoint: &str) -> String {
+    let trimmed = endpoint.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if trimmed.ends_with("/chat/completions") {
+        trimmed.to_string()
+    } else if trimmed.ends_with("/v1") {
+        format!("{}/chat/completions", trimmed)
+    } else {
+        format!("{}/chat/completions", trimmed)
+    }
+}
+
 /// Translation settings for batch processing
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TranslationSettings {
     pub batch_size: usize,
     pub auto_continue: bool,
+    #[serde(default)]
+    pub continue_on_error: bool,
     pub max_retries: usize,
 }
+
 
 impl Default for TranslationSettings {
     fn default() -> Self {
         Self {
             batch_size: 50,
             auto_continue: true,
+            continue_on_error: false,
             max_retries: 3,
         }
+
     }
 }
 
@@ -61,7 +87,32 @@ impl Default for TranslationProgress {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationRetryInfo {
+    pub attempt: usize,
+    pub max_retries: usize,
+    pub error_message: String,
+    pub progress: TranslationProgress,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationErrorInfo {
+    pub error_message: String,
+    pub progress: TranslationProgress,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslationBatchReport {
+    pub translations: Vec<(usize, String)>,
+    pub progress: TranslationProgress,
+    pub error_message: Option<String>,
+}
+
 /// Result of a batch translation operation
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchTranslationResult {
     pub translations: Vec<(usize, String)>,
@@ -116,14 +167,37 @@ pub struct LlmClient {
 }
 
 impl LlmClient {
-    pub fn new(config: LlmConfig) -> Self {
+    pub fn new(mut config: LlmConfig) -> Self {
+        config.endpoint = normalize_endpoint(&config.endpoint);
         Self {
             client: Client::new(),
             config,
         }
     }
 
+    fn apply_headers(&self, builder: RequestBuilder) -> RequestBuilder {
+        let mut builder = builder;
+
+        if !self.config.api_key.trim().is_empty() {
+            builder = builder.header(
+                "Authorization",
+                format!("Bearer {}", self.config.api_key),
+            );
+        }
+
+        for (key, value) in &self.config.headers {
+            let key = key.trim();
+            if key.is_empty() {
+                continue;
+            }
+            builder = builder.header(key, value);
+        }
+
+        builder
+    }
+
     /// Lista modelos disponíveis na API
+
     pub async fn list_models(&self) -> Result<Vec<LlmModel>, String> {
         // Constrói URL para /models
         let base_url = self
@@ -134,12 +208,11 @@ impl LlmClient {
         let models_url = format!("{}/models", base_url);
 
         let response = self
-            .client
-            .get(&models_url)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
+            .apply_headers(self.client.get(&models_url))
             .send()
             .await
             .map_err(|e| format!("Failed to fetch models: {}", e))?;
+
 
         if !response.status().is_success() {
             let status = response.status();
@@ -180,14 +253,16 @@ impl LlmClient {
         };
 
         let response = self
-            .client
-            .post(&self.config.endpoint)
-            .header("Authorization", format!("Bearer {}", self.config.api_key))
-            .header("Content-Type", "application/json")
+            .apply_headers(
+                self.client
+                    .post(&self.config.endpoint)
+                    .header("Content-Type", "application/json"),
+            )
             .json(&request)
             .send()
             .await
             .map_err(|e| format!("Translation request failed: {}", e))?;
+
 
         if !response.status().is_success() {
             let status = response.status();
@@ -322,11 +397,29 @@ impl LlmClient {
         entries: &[(usize, String)],
         settings: &TranslationSettings,
         mut on_progress: impl FnMut(TranslationProgress),
-    ) -> Result<Vec<(usize, String)>, String> {
+        mut on_retry: impl FnMut(TranslationRetryInfo),
+        mut on_error: impl FnMut(TranslationErrorInfo),
+    ) -> Result<TranslationBatchReport, String> {
         let mut all_translations: Vec<(usize, String)> = Vec::new();
         let mut current_index = 1; // Legendas geralmente começam em 1
         let total = entries.len();
         let mut retries = 0;
+
+        let mut build_progress = |translations: &Vec<(usize, String)>| -> TranslationProgress {
+            let translated_entries = translations.len();
+            let last_translated_index = translations
+                .last()
+                .map(|(idx, _)| *idx)
+                .unwrap_or(0);
+            let is_partial = translated_entries < total;
+            TranslationProgress {
+                total_entries: total,
+                translated_entries,
+                last_translated_index,
+                is_partial,
+                can_continue: is_partial,
+            }
+        };
 
         loop {
             match self
@@ -344,16 +437,7 @@ impl LlmClient {
                     all_translations.extend(result.translations);
 
                     // Atualiza progresso
-                    let progress = TranslationProgress {
-                        total_entries: total,
-                        translated_entries: all_translations.len(),
-                        last_translated_index: all_translations
-                            .last()
-                            .map(|(idx, _)| *idx)
-                            .unwrap_or(0),
-                        is_partial: all_translations.len() < total,
-                        can_continue: all_translations.len() < total,
-                    };
+                    let progress = build_progress(&all_translations);
                     on_progress(progress.clone());
 
                     // Verifica se completou
@@ -370,20 +454,50 @@ impl LlmClient {
                 }
                 Err(e) => {
                     retries += 1;
+                    let progress = build_progress(&all_translations);
+
                     if retries >= settings.max_retries {
-                        return Err(format!(
+                        let error_message = format!(
                             "Translation failed after {} retries: {}",
                             settings.max_retries, e
-                        ));
+                        );
+                        let mut error_progress = progress.clone();
+                        error_progress.can_continue =
+                            settings.continue_on_error && error_progress.is_partial;
+
+                        on_error(TranslationErrorInfo {
+                            error_message: error_message.clone(),
+                            progress: error_progress.clone(),
+                        });
+
+                        return Ok(TranslationBatchReport {
+                            translations: all_translations,
+                            progress: error_progress,
+                            error_message: Some(error_message),
+                        });
                     }
+
+                    on_retry(TranslationRetryInfo {
+                        attempt: retries,
+                        max_retries: settings.max_retries,
+                        error_message: e,
+                        progress,
+                    });
+
                     // Pequeno delay antes de retry
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                 }
             }
         }
 
-        Ok(all_translations)
+        let progress = build_progress(&all_translations);
+        Ok(TranslationBatchReport {
+            translations: all_translations,
+            progress,
+            error_message: None,
+        })
     }
+
 }
 
 #[cfg(test)]

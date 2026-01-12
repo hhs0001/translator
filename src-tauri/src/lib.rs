@@ -10,9 +10,10 @@ use serde::{Deserialize, Serialize};
 use subtitle::{SubtitleFile, SubtitleFormat};
 use tauri::Manager;
 use translator::{
-    BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationProgress,
-    TranslationSettings,
+    BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
+    TranslationProgress, TranslationSettings,
 };
+
 
 // ============================================================================
 // Comandos de Legendas
@@ -143,7 +144,9 @@ async fn translate_text(
 struct SubtitleTranslationResult {
     file: SubtitleFile,
     progress: TranslationProgress,
+    error_message: Option<String>,
 }
+
 
 /// Traduz um lote específico de legendas (para continue functionality)
 #[tauri::command]
@@ -168,6 +171,7 @@ async fn translate_subtitle_batch(
 /// Traduz arquivo completo com batching e auto-continue
 #[tauri::command]
 async fn translate_subtitle_full(
+    app: tauri::AppHandle,
     config: LlmConfig,
     system_prompt: String,
     mut file: SubtitleFile,
@@ -177,32 +181,39 @@ async fn translate_subtitle_full(
 
     // Extrai textos para tradução
     let texts = file.extract_texts();
-    let total = texts.len();
 
     // Traduz com batching
-    let translations = client
-        .translate_all_batched(&system_prompt, &texts, &settings, |_progress| {
-            // Progress callback - poderia emitir eventos Tauri aqui
-        })
+    let TranslationBatchReport {
+        translations,
+        progress,
+        error_message,
+    } = client
+        .translate_all_batched(
+            &system_prompt,
+            &texts,
+            &settings,
+            |progress| {
+                let _ = app.emit_all("translation:progress", progress.clone());
+            },
+            |retry| {
+                let _ = app.emit_all("translation:retry", retry.clone());
+            },
+            |error| {
+                let _ = app.emit_all("translation:error", error.clone());
+            },
+        )
         .await?;
 
     // Aplica traduções de volta
-    file.apply_translations(translations.clone());
-
-    let translated_count = translations.len();
-    let last_index = translations.last().map(|(idx, _)| *idx).unwrap_or(0);
+    file.apply_translations(translations);
 
     Ok(SubtitleTranslationResult {
         file,
-        progress: TranslationProgress {
-            total_entries: total,
-            translated_entries: translated_count,
-            last_translated_index: last_index,
-            is_partial: translated_count < total,
-            can_continue: translated_count < total,
-        },
+        progress,
+        error_message,
     })
 }
+
 
 /// Continua tradução de um arquivo parcialmente traduzido
 #[tauri::command]
@@ -245,12 +256,150 @@ async fn continue_translation(
             is_partial: translated_count < total,
             can_continue: translated_count < total,
         },
+        error_message: None,
     })
+}
+
+
+// ============================================================================
+// Settings da UI
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppSettings {
+    #[serde(default = "default_base_url")]
+    base_url: String,
+    #[serde(default = "default_api_key")]
+    api_key: String,
+    #[serde(default)]
+    headers: Vec<(String, String)>,
+    #[serde(default = "default_model")]
+    model: String,
+    #[serde(default)]
+    custom_model: String,
+    #[serde(default)]
+    selected_template_id: Option<String>,
+    #[serde(default)]
+    prompt: String,
+    #[serde(default = "default_batch_size")]
+    batch_size: usize,
+    #[serde(default = "default_auto_continue")]
+    auto_continue: bool,
+    #[serde(default = "default_continue_on_error")]
+    continue_on_error: bool,
+    #[serde(default = "default_max_retries")]
+    max_retries: usize,
+    #[serde(default = "default_concurrency")]
+    concurrency: usize,
+    #[serde(default = "default_output_mode")]
+    output_mode: String,
+    #[serde(default)]
+    mux_language: Option<String>,
+    #[serde(default)]
+    mux_title: Option<String>,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            base_url: default_base_url(),
+            api_key: default_api_key(),
+            headers: Vec::new(),
+            model: default_model(),
+            custom_model: String::new(),
+            selected_template_id: None,
+            prompt: String::new(),
+            batch_size: default_batch_size(),
+            auto_continue: default_auto_continue(),
+            continue_on_error: default_continue_on_error(),
+            max_retries: default_max_retries(),
+            concurrency: default_concurrency(),
+            output_mode: default_output_mode(),
+            mux_language: None,
+            mux_title: None,
+        }
+    }
+}
+
+fn default_base_url() -> String {
+    "http://localhost:8317/v1".to_string()
+}
+
+fn default_api_key() -> String {
+    "dummy".to_string()
+}
+
+fn default_model() -> String {
+    "gemini-2.5-pro".to_string()
+}
+
+fn default_batch_size() -> usize {
+    50
+}
+
+fn default_auto_continue() -> bool {
+    true
+}
+
+fn default_continue_on_error() -> bool {
+    false
+}
+
+fn default_max_retries() -> usize {
+    3
+}
+
+fn default_concurrency() -> usize {
+    1
+}
+
+fn default_output_mode() -> String {
+    "separate".to_string()
+}
+
+fn get_settings_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+
+    fs::create_dir_all(&app_data_dir)
+        .map_err(|e| format!("Failed to create app data dir: {}", e))?;
+
+    Ok(app_data_dir.join("settings.json"))
+}
+
+#[tauri::command]
+async fn load_settings(app: tauri::AppHandle) -> Result<AppSettings, String> {
+    let path = get_settings_path(&app)?;
+
+    if !path.exists() {
+        return Ok(AppSettings::default());
+    }
+
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read settings: {}", e))?;
+    let settings: AppSettings =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {}", e))?;
+
+    Ok(settings)
+}
+
+#[tauri::command]
+async fn save_settings(app: tauri::AppHandle, settings: AppSettings) -> Result<(), String> {
+    let path = get_settings_path(&app)?;
+
+    let content = serde_json::to_string_pretty(&settings)
+        .map_err(|e| format!("Failed to serialize settings: {}", e))?;
+
+    fs::write(&path, content).map_err(|e| format!("Failed to write settings: {}", e))
 }
 
 // ============================================================================
 // Prompt Templates
 // ============================================================================
+
 
 /// Prompt template structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -524,9 +673,13 @@ pub fn run() {
             translate_subtitle_batch,
             translate_subtitle_full,
             continue_translation,
+            // Settings
+            load_settings,
+            save_settings,
             // Templates
             load_templates,
             save_templates,
+
             add_template,
             delete_template,
             update_template,
