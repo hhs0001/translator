@@ -20,17 +20,22 @@ export function useModels() {
 
     try {
       const result = await invoke<LLMModel[]>('list_llm_models', {
-        baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
+        config: {
+          endpoint: settings.baseUrl,
+          apiKey: settings.apiKey || '',
+          model: settings.model || '',
+          headers: settings.headers || [],
+        }
       });
       setModels(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch models');
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage);
       setModels([]);
     } finally {
       setIsLoading(false);
     }
-  }, [settings.baseUrl, settings.apiKey]);
+  }, [settings.baseUrl, settings.apiKey, settings.model, settings.headers]);
 
   // Auto-fetch when baseUrl changes
   useEffect(() => {

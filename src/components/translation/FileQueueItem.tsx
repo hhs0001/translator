@@ -1,4 +1,4 @@
-import { Button, Chip } from '@heroui/react';
+import { Button, Chip, Select, Label, ListBox, Spinner } from '@heroui/react';
 import { QueueFile, FileStatus } from '../../types';
 import { useTranslationStore } from '../../stores/translationStore';
 
@@ -11,16 +11,36 @@ const STATUS_CONFIG: Record<FileStatus, { label: string; color: 'default' | 'acc
   pending: { label: 'Pendente', color: 'default' },
   extracting: { label: 'Extraindo', color: 'accent' },
   translating: { label: 'Traduzindo', color: 'accent' },
+  detecting_language: { label: 'Detectando Idioma', color: 'accent' },
+  saving: { label: 'Salvando', color: 'accent' },
+  muxing: { label: 'Muxando', color: 'accent' },
   paused: { label: 'Pausado', color: 'warning' },
   completed: { label: 'Concluído', color: 'success' },
   error: { label: 'Erro', color: 'danger' },
 };
 
+function getTrackLabel(track: { index: number; codec: string; language?: string; title?: string }) {
+  const parts = [`Faixa ${track.index + 1}`];
+  if (track.language) parts.push(`(${track.language})`);
+  if (track.title) parts.push(`- ${track.title}`);
+  parts.push(`[${track.codec}]`);
+  return parts.join(' ');
+}
+
 export function FileQueueItem({ file, index }: Props) {
-  const { removeFile } = useTranslationStore();
+  const { removeFile, setSelectedTrack } = useTranslationStore();
   const config = STATUS_CONFIG[file.status];
 
-  const isProcessing = file.status === 'extracting' || file.status === 'translating';
+  const isProcessing = ['extracting', 'translating', 'detecting_language', 'saving', 'muxing'].includes(file.status);
+  const isVideo = file.type === 'video';
+  const hasTracks = file.subtitleTracks && file.subtitleTracks.length > 0;
+  const noTracks = file.subtitleTracks && file.subtitleTracks.length === 0 && !file.isLoadingTracks;
+
+  const handleTrackChange = (key: React.Key | null) => {
+    if (key !== null) {
+      setSelectedTrack(file.id, Number(key));
+    }
+  };
 
   return (
     <div className="flex items-center gap-3 p-3 bg-default-100 rounded-lg">
@@ -34,7 +54,49 @@ export function FileQueueItem({ file, index }: Props) {
           <Chip size="sm" color={config.color} variant="soft">
             {config.label}
           </Chip>
+          {isVideo && <Chip size="sm" variant="soft">Video</Chip>}
         </div>
+
+        {isVideo && file.isLoadingTracks && (
+          <div className="flex items-center gap-2 mt-2 text-xs text-default-500">
+            <Spinner size="sm" />
+            <span>Detectando faixas...</span>
+          </div>
+        )}
+
+        {isVideo && noTracks && (
+          <p className="text-xs text-warning mt-2">
+            Nenhuma faixa de legenda encontrada
+          </p>
+        )}
+
+        {isVideo && hasTracks && (
+          <div className="mt-2">
+            <Select
+              aria-label="Selecionar faixa de legenda"
+              selectedKey={String(file.selectedTrackIndex ?? 0)}
+              onSelectionChange={handleTrackChange}
+              className="w-full max-w-xs"
+              isDisabled={isProcessing}
+            >
+              <Label className="sr-only">Faixa de legenda</Label>
+              <Select.Trigger>
+                <Select.Value />
+                <Select.Indicator />
+              </Select.Trigger>
+              <Select.Popover>
+                <ListBox>
+                  {file.subtitleTracks!.map((track) => (
+                    <ListBox.Item id={String(track.index)} key={track.index} textValue={getTrackLabel(track)}>
+                      {getTrackLabel(track)}
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </Select.Popover>
+            </Select>
+          </div>
+        )}
 
         {isProcessing && (
           <div className="mt-2 h-2 bg-default-200 rounded-full overflow-hidden">

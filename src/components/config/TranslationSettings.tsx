@@ -11,6 +11,22 @@ const BATCH_PRESETS = [
 export function TranslationSettings() {
   const { settings, updateSetting } = useSettingsStore();
 
+  const handleBatchSelect = (key: React.Key | null) => {
+    if (key) {
+      const value = Number(key);
+      if (!isNaN(value) && value > 0) {
+        updateSetting('batchSize', value);
+      }
+    }
+  };
+
+  const handleNumberInput = (field: 'batchSize' | 'concurrency' | 'maxRetries', value: string) => {
+    const num = parseInt(value, 10);
+    if (!isNaN(num) && num >= 0) {
+      updateSetting(field, num);
+    }
+  };
+
   return (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4">Configurações de Tradução</h3>
@@ -22,19 +38,21 @@ export function TranslationSettings() {
             <Select
               aria-label="Tamanho do batch"
               selectedKey={String(settings.batchSize)}
-              onSelectionChange={(key) => updateSetting('batchSize', Number(key))}
+              onSelectionChange={handleBatchSelect}
               className="flex-1"
               placeholder="Selecione"
             >
-              <Label>Tamanho</Label>
+              <Label className="sr-only">Tamanho</Label>
               <Select.Trigger>
                 <Select.Value />
+                <Select.Indicator />
               </Select.Trigger>
               <Select.Popover>
                 <ListBox>
                   {BATCH_PRESETS.map((preset) => (
-                    <ListBox.Item key={String(preset.value)} textValue={preset.label}>
+                    <ListBox.Item id={String(preset.value)} key={String(preset.value)} textValue={preset.label}>
                       {preset.label}
+                      <ListBox.ItemIndicator />
                     </ListBox.Item>
                   ))}
                 </ListBox>
@@ -42,8 +60,8 @@ export function TranslationSettings() {
             </Select>
             <Input
               type="number"
-              value={String(settings.batchSize)}
-              onChange={(e) => updateSetting('batchSize', Number(e.target.value))}
+              value={String(settings.batchSize || 50)}
+              onChange={(e) => handleNumberInput('batchSize', e.target.value)}
               className="w-24"
               min={1}
               max={500}
@@ -58,8 +76,8 @@ export function TranslationSettings() {
           <label className="block text-sm font-medium mb-1">Concorrência</label>
           <Input
             type="number"
-            value={String(settings.concurrency)}
-            onChange={(e) => updateSetting('concurrency', Number(e.target.value))}
+            value={String(settings.concurrency || 1)}
+            onChange={(e) => handleNumberInput('concurrency', e.target.value)}
             className="w-24"
             min={1}
             max={10}
@@ -73,8 +91,8 @@ export function TranslationSettings() {
           <label className="block text-sm font-medium mb-1">Máximo de Retentativas</label>
           <Input
             type="number"
-            value={String(settings.maxRetries)}
-            onChange={(e) => updateSetting('maxRetries', Number(e.target.value))}
+            value={String(settings.maxRetries || 3)}
+            onChange={(e) => handleNumberInput('maxRetries', e.target.value)}
             className="w-24"
             min={0}
             max={10}
@@ -82,19 +100,25 @@ export function TranslationSettings() {
         </div>
 
         <div className="space-y-3 pt-2">
-          <Switch
+          <Switch.Root
             isSelected={settings.autoContinue}
-            onChange={(checked) => updateSetting('autoContinue', checked)}
+            onChange={(checked: boolean) => updateSetting('autoContinue', checked)}
           >
-            Continuar automaticamente (respostas parciais)
-          </Switch>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <Label>Continuar automaticamente (respostas parciais)</Label>
+          </Switch.Root>
 
-          <Switch
+          <Switch.Root
             isSelected={settings.continueOnError}
-            onChange={(checked) => updateSetting('continueOnError', checked)}
+            onChange={(checked: boolean) => updateSetting('continueOnError', checked)}
           >
-            Continuar fila em caso de erro
-          </Switch>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <Label>Continuar fila em caso de erro</Label>
+          </Switch.Root>
         </div>
       </div>
     </Card>

@@ -36,7 +36,7 @@ export function LogsDrawer() {
                 <Select
                   aria-label="Filtrar logs"
                   selectedKey={filter}
-                  onSelectionChange={(key) => setFilter(key as LogLevel | 'all')}
+                  onSelectionChange={(key) => key && setFilter(key as LogLevel | 'all')}
                   className="w-28"
                   placeholder="Todos"
                 >

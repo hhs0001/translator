@@ -27,6 +27,12 @@ export function ApiSettings() {
     updateSetting('headers', settings.headers.filter((h) => h.id !== id));
   };
 
+  const handleModelChange = (key: React.Key | null) => {
+    if (key) {
+      updateSetting('model', String(key));
+    }
+  };
+
   return (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4">Conexão com API</h3>
@@ -61,21 +67,23 @@ export function ApiSettings() {
           <div className="flex gap-2">
             <Select
               aria-label="Selecionar modelo"
-              selectedKey={settings.model}
-              onSelectionChange={(key) => updateSetting('model', key as string)}
+              selectedKey={settings.model || undefined}
+              onSelectionChange={handleModelChange}
               className="flex-1"
               isDisabled={isLoading || models.length === 0}
               placeholder={isLoading ? 'Carregando...' : 'Selecione um modelo'}
             >
-              <Label>Modelo</Label>
+              <Label className="sr-only">Modelo</Label>
               <Select.Trigger>
                 <Select.Value />
+                <Select.Indicator />
               </Select.Trigger>
               <Select.Popover>
                 <ListBox>
                   {models.map((model) => (
-                    <ListBox.Item key={model.id} textValue={model.name || model.id}>
-                      {model.name || model.id}
+                    <ListBox.Item id={model.id} key={model.id} textValue={model.id}>
+                      {model.id}
+                      <ListBox.ItemIndicator />
                     </ListBox.Item>
                   ))}
                 </ListBox>
@@ -101,8 +109,43 @@ export function ApiSettings() {
           </p>
         </div>
 
-        <Accordion variant="surface">
-          <Accordion.Item key="headers">
+        <div>
+          <label className="block text-sm font-medium mb-1">Modelo para Detecção de Idioma (opcional)</label>
+          <Select
+            aria-label="Modelo para detecção de idioma"
+            selectedKey={settings.languageDetectionModel || undefined}
+            onSelectionChange={(key) => updateSetting('languageDetectionModel', key ? String(key) : '')}
+            className="w-full"
+            isDisabled={isLoading || models.length === 0}
+            placeholder="Nenhum (usar configuração manual)"
+          >
+            <Label className="sr-only">Modelo para Detecção</Label>
+            <Select.Trigger>
+              <Select.Value />
+              <Select.Indicator />
+            </Select.Trigger>
+            <Select.Popover>
+              <ListBox>
+                <ListBox.Item id="" key="none" textValue="Nenhum">
+                  Nenhum (usar configuração manual)
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+                {models.map((model) => (
+                  <ListBox.Item id={model.id} key={model.id} textValue={model.id}>
+                    {model.id}
+                    <ListBox.ItemIndicator />
+                  </ListBox.Item>
+                ))}
+              </ListBox>
+            </Select.Popover>
+          </Select>
+          <p className="text-xs text-default-500 mt-1">
+            Modelo leve para detectar o idioma da tradução e usar no mux (ex: gemma-3-1b)
+          </p>
+        </div>
+
+        <Accordion.Root variant="surface">
+          <Accordion.Item id="headers">
             <Accordion.Heading>
               <Accordion.Trigger>
                 Headers Avançados
@@ -128,7 +171,7 @@ export function ApiSettings() {
                       />
                       <Button
                         variant="danger"
-                        isIconOnly
+                        size="sm"
                         onPress={() => removeHeader(header.id)}
                       >
                         ✕
@@ -142,7 +185,7 @@ export function ApiSettings() {
               </Accordion.Body>
             </Accordion.Panel>
           </Accordion.Item>
-        </Accordion>
+        </Accordion.Root>
       </div>
     </Card>
   );

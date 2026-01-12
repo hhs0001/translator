@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Configuração do cliente LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LlmConfig {
     pub endpoint: String,
     pub api_key: String,

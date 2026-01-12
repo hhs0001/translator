@@ -10,6 +10,9 @@ export interface AppSettings {
   model: string;
   customModel: string;
 
+  // Modelo para detecção de idioma
+  languageDetectionModel: string;
+
   // Prompt
   prompt: string;
   selectedTemplateId: string | null;
@@ -40,6 +43,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   headers: [],
   model: '',
   customModel: '',
+  languageDetectionModel: '',
   prompt: 'Translate the following subtitle lines to Brazilian Portuguese. Keep the same tone and style. Return only the translations, one per line, in the same order.',
   selectedTemplateId: null,
   batchSize: 50,
@@ -69,7 +73,8 @@ export interface Template {
 
 export interface LLMModel {
   id: string;
-  name: string;
+  object: string;
+  owned_by?: string;
 }
 
 // ============================================
@@ -99,10 +104,38 @@ export interface SubtitleFile {
 }
 
 // ============================================
+// TRANSLATION RESULT
+// ============================================
+
+export interface TranslationProgress {
+  totalEntries: number;
+  translatedEntries: number;
+  lastTranslatedIndex: number;
+  isPartial: boolean;
+  canContinue: boolean;
+}
+
+export interface SubtitleTranslationResult {
+  file: SubtitleFile;
+  progress: TranslationProgress;
+  errorMessage?: string;
+}
+
+// ============================================
+// LANGUAGE DETECTION
+// ============================================
+
+export interface DetectedLanguage {
+  code: string;        // ISO 639-2 (por, eng, spa, etc)
+  name: string;        // Nome completo (Portuguese, English, Spanish)
+  displayName: string; // Nome para exibição com código (Portuguese (pt-BR))
+}
+
+// ============================================
 // TRANSLATION QUEUE
 // ============================================
 
-export type FileStatus = 'pending' | 'extracting' | 'translating' | 'paused' | 'completed' | 'error';
+export type FileStatus = 'pending' | 'extracting' | 'translating' | 'detecting_language' | 'saving' | 'muxing' | 'paused' | 'completed' | 'error';
 
 export interface QueueFile {
   id: string;
@@ -121,7 +154,16 @@ export interface QueueFile {
 
   // Para vídeos
   selectedTrackIndex?: number;
+  subtitleTracks?: SubtitleTrack[];
+  isLoadingTracks?: boolean;
   extractedSubtitlePath?: string;
+  
+  // Idioma detectado
+  detectedLanguage?: DetectedLanguage;
+  
+  // Paths de saída
+  outputSubtitlePath?: string;
+  outputVideoPath?: string;
 }
 
 export interface TranslationState {

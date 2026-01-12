@@ -95,10 +95,12 @@ export function OutputSettings() {
 
         <div className="p-3 bg-default-100 rounded-lg">
           <p className="text-sm">
-            <span className="font-medium">Backup automático:</span> Sempre ativado
+            <span className="font-medium">Arquivos originais:</span> Preservados
           </p>
           <p className="text-xs text-default-500 mt-1">
-            Um backup do arquivo original será criado antes de qualquer modificação
+            {settings.outputMode === 'mux' 
+              ? 'Legendas salvas como .translated.ass e vídeo muxado como .muxed.mkv'
+              : 'Legendas traduzidas salvas como .translated.ass'}
           </p>
         </div>
       </div>

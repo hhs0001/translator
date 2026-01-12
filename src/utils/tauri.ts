@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
-import { AppSettings } from '../types';
-import { Template, LLMModel, SubtitleFile, SubtitleEntry, SubtitleTrack } from '../types';
+import { AppSettings, SubtitleTranslationResult, DetectedLanguage } from '../types';
+import { Template, LLMModel, SubtitleFile, SubtitleTrack } from '../types';
 
 export async function loadSettings(): Promise<AppSettings> {
   return invoke<AppSettings>('load_settings');
@@ -19,15 +19,22 @@ export async function addTemplate(name: string, content: string): Promise<Templa
 }
 
 export async function updateTemplate(id: string, name: string, content: string): Promise<Template> {
-  return invoke('update_template', { template_id: id, name, content });
+  return invoke('update_template', { templateId: id, name, content });
 }
 
 export async function deleteTemplate(id: string): Promise<void> {
-  return invoke('delete_template', { template_id: id });
+  return invoke('delete_template', { templateId: id });
 }
 
 export async function listLLMModels(baseUrl: string, apiKey: string): Promise<LLMModel[]> {
-  return invoke<LLMModel[]>('list_llm_models', { config: { baseUrl, apiKey, headers: [], model: '', customModel: '' } });
+  return invoke<LLMModel[]>('list_llm_models', { 
+    config: { 
+      endpoint: baseUrl, 
+      apiKey: apiKey || '', 
+      headers: [], 
+      model: '' 
+    } 
+  });
 }
 
 export async function loadSubtitle(path: string): Promise<SubtitleFile> {
@@ -46,8 +53,8 @@ export async function listVideoSubtitleTracks(videoPath: string): Promise<Subtit
   return invoke<SubtitleTrack[]>('list_video_subtitle_tracks', { videoPath });
 }
 
-export async function extractSubtitleTrack(videoPath: string, trackIndex: number, outputPath?: string): Promise<void> {
-  return invoke('extract_subtitle_track', { videoPath, trackIndex, outputPath: outputPath || '' });
+export async function extractSubtitleTrack(videoPath: string, trackIndex: number, outputPath: string): Promise<void> {
+  return invoke('extract_subtitle_track', { videoPath, trackIndex, outputPath });
 }
 
 export async function muxSubtitleToVideo(
@@ -68,23 +75,21 @@ export async function translateSubtitleFull(
   model: string,
   batchSize: number,
   headers: Record<string, string>
-): Promise<{ translated_entries: SubtitleEntry[]; is_partial: boolean }> {
-  return invoke('translate_subtitle_full', {
+): Promise<SubtitleTranslationResult> {
+  return invoke<SubtitleTranslationResult>('translate_subtitle_full', {
     config: {
-      baseUrl,
-      apiKey,
+      endpoint: baseUrl,
+      apiKey: apiKey || '',
       headers: Object.entries(headers).map(([k, v]) => [k, v]),
       model,
-      customModel: model,
     },
-    system_prompt: prompt,
+    systemPrompt: prompt,
     file: subtitle,
     settings: {
-      batch_size: batchSize,
-      auto_continue: true,
-      continue_on_error: true,
-      max_retries: 3,
-      concurrency: 1,
+      batchSize: batchSize,
+      autoContinue: true,
+      continueOnError: true,
+      maxRetries: 3,
     },
   });
 }
@@ -99,4 +104,22 @@ export async function replaceFile(sourcePath: string, targetPath: string): Promi
 
 export async function getFileInfo(path: string): Promise<{ path: string; filename: string; extension: string; size: number; is_video: boolean; is_subtitle: boolean }> {
   return invoke('get_file_info', { path });
+}
+
+export async function detectLanguage(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  sampleText: string,
+  headers: Record<string, string> = {}
+): Promise<DetectedLanguage> {
+  return invoke<DetectedLanguage>('detect_language', {
+    config: {
+      endpoint: baseUrl,
+      apiKey: apiKey || '',
+      headers: Object.entries(headers).map(([k, v]) => [k, v]),
+      model,
+    },
+    sampleText,
+  });
 }

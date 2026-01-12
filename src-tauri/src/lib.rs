@@ -142,6 +142,7 @@ async fn translate_text(
 
 /// Resultado de tradução em batch com progresso
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct SubtitleTranslationResult {
     file: SubtitleFile,
     progress: TranslationProgress,
@@ -215,6 +216,75 @@ async fn translate_subtitle_full(
     })
 }
 
+
+// ============================================================================
+// Detecção de Idioma
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DetectedLanguage {
+    code: String,         // ISO 639-2 (por, eng, spa, etc)
+    name: String,         // Nome completo (Portuguese, English, Spanish)
+    display_name: String, // Nome para exibição (Portuguese (pt-BR))
+}
+
+/// Detecta o idioma de um texto usando um modelo LLM
+#[tauri::command]
+async fn detect_language(
+    config: LlmConfig,
+    sample_text: String,
+) -> Result<DetectedLanguage, String> {
+    let client = LlmClient::new(config);
+    
+    let prompt = r#"Analyze the following text and detect its language. 
+Respond with ONLY a JSON object in this exact format (no markdown, no extra text):
+{"code": "por", "name": "Portuguese", "displayName": "Portuguese (pt-BR)"}
+
+Where:
+- "code" is the ISO 639-2 three-letter code (e.g., "por" for Portuguese, "eng" for English, "spa" for Spanish)
+- "name" is the language name in English
+- "displayName" is the language name with regional variant if detectable (e.g., "Portuguese (pt-BR)", "English (en-US)", "Spanish (es-ES)")
+
+Text to analyze:
+"#;
+    
+    let full_prompt = format!("{}{}", prompt, sample_text);
+    
+    let response = client.translate(&full_prompt, "").await?;
+    
+    // Tenta extrair JSON da resposta
+    let response = response.trim();
+    
+    // Remove possíveis marcadores de código markdown
+    let json_str = if response.starts_with("```") {
+        response
+            .lines()
+            .skip(1)
+            .take_while(|l| !l.starts_with("```"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    } else {
+        response.to_string()
+    };
+    
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct LangResponse {
+        code: String,
+        name: String,
+        display_name: String,
+    }
+    
+    let lang: LangResponse = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse language detection response: {}. Response was: {}", e, response))?;
+    
+    Ok(DetectedLanguage {
+        code: lang.code,
+        name: lang.name,
+        display_name: lang.display_name,
+    })
+}
 
 /// Continua tradução de um arquivo parcialmente traduzido
 #[tauri::command]
@@ -667,13 +737,14 @@ pub fn run() {
             list_video_subtitle_tracks,
             extract_subtitle_track,
             mux_subtitle_to_video,
-            // Tradução
+// Tradução
             list_llm_models,
             translate_subtitle,
             translate_text,
             translate_subtitle_batch,
             translate_subtitle_full,
             continue_translation,
+            detect_language,
             // Settings
             load_settings,
             save_settings,

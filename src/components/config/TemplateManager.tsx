@@ -6,11 +6,13 @@ import { Template } from '../../types';
 export function TemplateManager() {
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useSettingsStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [templateToDelete, setTemplateToDelete] = useState<string | null>(null);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const openNewModal = () => {
     setEditingTemplate(null);
@@ -44,16 +46,23 @@ export function TemplateManager() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este template?')) return;
+  const openDeleteConfirm = (id: string) => {
+    setTemplateToDelete(id);
+    setIsDeleteModalOpen(true);
+  };
 
-    setIsDeleting(id);
+  const handleDelete = async () => {
+    if (!templateToDelete) return;
+
+    setIsDeleting(true);
     try {
-      await deleteTemplate(id);
+      await deleteTemplate(templateToDelete);
+      setIsDeleteModalOpen(false);
+      setTemplateToDelete(null);
     } catch (error) {
       console.error('Failed to delete template:', error);
     } finally {
-      setIsDeleting(null);
+      setIsDeleting(false);
     }
   };
 
@@ -90,10 +99,9 @@ export function TemplateManager() {
                 <Button
                   size="sm"
                   variant="danger"
-                  onPress={() => handleDelete(template.id)}
-                  isDisabled={isDeleting === template.id}
+                  onPress={() => openDeleteConfirm(template.id)}
                 >
-                  {isDeleting === template.id ? '...' : 'Excluir'}
+                  Excluir
                 </Button>
               </div>
             </div>
@@ -101,47 +109,72 @@ export function TemplateManager() {
         </div>
       )}
 
+      {/* Modal de Edição/Criação */}
       <Modal isOpen={isModalOpen} onOpenChange={setIsModalOpen}>
-        <Modal.Trigger>
-          <Button variant="primary" className="hidden">Open</Button>
-        </Modal.Trigger>
-        <Modal.Backdrop />
-        <Modal.Container>
-          <Modal.Dialog>
-            <Modal.Header>
-              <Modal.Heading>{editingTemplate ? 'Editar Template' : 'Novo Template'}</Modal.Heading>
-            </Modal.Header>
-            <Modal.Body>
-              <div className="space-y-4">
-                <div className="flex flex-col gap-1">
-                  <Label>Nome</Label>
-                  <Input
-                    placeholder="Ex: Anime Informal"
-                    value={name}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-                  />
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-[500px]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>{editingTemplate ? 'Editar Template' : 'Novo Template'}</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-1">
+                    <Label>Nome</Label>
+                    <Input
+                      placeholder="Ex: Anime Informal"
+                      value={name}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Label>Conteúdo do Prompt</Label>
+                    <TextArea
+                      placeholder="Digite o prompt..."
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      className="min-h-[200px]"
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <Label>Conteúdo do Prompt</Label>
-                  <TextArea
-                    placeholder="Digite o prompt..."
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                  />
-                </div>
-              </div>
-            </Modal.Body>
-            <Modal.Footer>
-              <Button variant="ghost" onPress={() => setIsModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button variant="primary" onPress={handleSave} isDisabled={isSaving}>
-                {isSaving ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </Modal.Footer>
-            <Modal.CloseTrigger />
-          </Modal.Dialog>
-        </Modal.Container>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="ghost" onPress={() => setIsModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button variant="primary" onPress={handleSave} isDisabled={isSaving}>
+                  {isSaving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <Modal isOpen={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog className="sm:max-w-[400px]">
+              <Modal.CloseTrigger />
+              <Modal.Header>
+                <Modal.Heading>Confirmar Exclusão</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                <p>Tem certeza que deseja excluir este template? Esta ação não pode ser desfeita.</p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="ghost" onPress={() => setIsDeleteModalOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button variant="danger" onPress={handleDelete} isDisabled={isDeleting}>
+                  {isDeleting ? 'Excluindo...' : 'Excluir'}
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
       </Modal>
     </Card>
   );

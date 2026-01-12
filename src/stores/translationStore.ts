@@ -19,6 +19,9 @@ interface TranslationState {
 
   updateFile: (id: string, updates: Partial<QueueFile>) => void;
   setFileStatus: (id: string, status: FileStatus, error?: string) => void;
+  setSelectedTrack: (id: string, trackIndex: number) => void;
+  setAllVideoTracks: (trackIndex: number) => void;
+  loadVideoTracks: (id: string) => Promise<void>;
 
   startTranslation: () => Promise<void>;
   pauseTranslation: () => void;
@@ -45,9 +48,15 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       progress: 0,
       totalLines: 0,
       translatedLines: 0,
+      isLoadingTracks: f.type === 'video',
     }));
     set((state) => ({ queue: [...state.queue, ...newFiles] }));
     useLogsStore.getState().addLog('info', `${files.length} arquivo(s) adicionado(s) à fila`);
+    
+    // Carregar faixas de legenda para vídeos
+    newFiles.filter(f => f.type === 'video').forEach(f => {
+      get().loadVideoTracks(f.id);
+    });
   },
 
   removeFile: (id) => {
@@ -79,6 +88,42 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         f.id === id ? { ...f, status, error } : f
       ),
     }));
+  },
+
+  setSelectedTrack: (id, trackIndex) => {
+    set((state) => ({
+      queue: state.queue.map((f) =>
+        f.id === id ? { ...f, selectedTrackIndex: trackIndex } : f
+      ),
+    }));
+  },
+
+  setAllVideoTracks: (trackIndex) => {
+    set((state) => ({
+      queue: state.queue.map((f) =>
+        f.type === 'video' ? { ...f, selectedTrackIndex: trackIndex } : f
+      ),
+    }));
+    useLogsStore.getState().addLog('info', `Faixa ${trackIndex + 1} selecionada para todos os vídeos`);
+  },
+
+  loadVideoTracks: async (id) => {
+    const { queue, updateFile } = get();
+    const file = queue.find((f) => f.id === id);
+    if (!file || file.type !== 'video') return;
+
+    updateFile(id, { isLoadingTracks: true });
+    try {
+      const tracks = await TauriUtils.listVideoSubtitleTracks(file.path);
+      updateFile(id, { 
+        subtitleTracks: tracks, 
+        isLoadingTracks: false,
+        selectedTrackIndex: tracks.length > 0 ? 0 : undefined
+      });
+    } catch (error) {
+      console.error('Failed to load tracks:', error);
+      updateFile(id, { subtitleTracks: [], isLoadingTracks: false });
+    }
   },
 
   startTranslation: async () => {
@@ -134,6 +179,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     const { updateFile, setFileStatus } = get();
     const settings = useSettingsStore.getState().settings;
     const logs = useLogsStore.getState();
+    const headersObj = settings.headers.reduce((acc, h) => ({ ...acc, [h.key]: h.value }), {} as Record<string, string>);
 
     try {
       set({ currentFileId: file.id });
@@ -144,8 +190,10 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         logs.addLog('info', `Extraindo legenda de ${file.name}...`, file.name);
 
         const trackIndex = file.selectedTrackIndex ?? 0;
-        await TauriUtils.extractSubtitleTrack(file.path, trackIndex);
-        subtitlePath = file.path.replace(/\.[^/.]+$/, '.srt');
+        // Gera o path de saída baseado no vídeo original
+        const outputSubtitlePath = file.path.replace(/\.[^/.]+$/, '.extracted.ass');
+        await TauriUtils.extractSubtitleTrack(file.path, trackIndex, outputSubtitlePath);
+        subtitlePath = outputSubtitlePath;
         updateFile(file.id, { extractedSubtitlePath: subtitlePath });
       }
 
@@ -166,26 +214,93 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         settings.apiKey,
         model,
         settings.batchSize,
-        settings.headers.reduce((acc, h) => ({ ...acc, [h.key]: h.value }), {})
+        headersObj
       );
 
       updateFile(file.id, {
-        translatedEntries: result.translated_entries,
-        translatedLines: result.translated_entries.length,
+        translatedEntries: result.file.entries,
+        translatedLines: result.progress.translatedEntries,
         progress: 100,
       });
 
-      if (result.is_partial && settings.autoContinue) {
+      if (result.progress.isPartial && settings.autoContinue) {
         logs.addLog('warning', `Tradução parcial, continuando...`, file.name);
       }
 
+      // Detectar idioma se um modelo de detecção estiver configurado
+      let muxLanguage = settings.muxLanguage;
+      let muxTitle = settings.muxTitle;
+      
+      if (settings.languageDetectionModel) {
+        setFileStatus(file.id, 'detecting_language');
+        logs.addLog('info', `Detectando idioma de ${file.name}...`, file.name);
+        
+        try {
+          // Pega uma amostra das primeiras 5 linhas traduzidas para detectar o idioma
+          const sampleText = result.file.entries
+            .slice(0, 5)
+            .map(e => e.text)
+            .join('\n');
+          
+          const detected = await TauriUtils.detectLanguage(
+            settings.baseUrl,
+            settings.apiKey,
+            settings.languageDetectionModel,
+            sampleText,
+            headersObj
+          );
+          
+          updateFile(file.id, { detectedLanguage: detected });
+          muxLanguage = detected.code;
+          muxTitle = detected.displayName;
+          logs.addLog('info', `Idioma detectado: ${detected.displayName}`, file.name);
+        } catch (langError) {
+          logs.addLog('warning', `Não foi possível detectar idioma: ${langError}. Usando configuração padrão.`, file.name);
+        }
+      }
+
+      // Salvar arquivo de legenda traduzido
+      setFileStatus(file.id, 'saving');
+      
+      // Determina o path de saída
+      let outputSubtitlePath: string;
+      if (settings.separateOutputDir) {
+        const fileName = file.name.replace(/\.[^/.]+$/, '.translated.ass');
+        outputSubtitlePath = `${settings.separateOutputDir}/${fileName}`;
+      } else {
+        outputSubtitlePath = subtitlePath.replace(/\.[^/.]+$/, '.translated.ass');
+      }
+      
+      await TauriUtils.saveSubtitle(outputSubtitlePath, result.file);
+      updateFile(file.id, { outputSubtitlePath });
+      logs.addLog('info', `Legenda salva em: ${outputSubtitlePath}`, file.name);
+
+      // Fazer mux se configurado e for um vídeo
+      if (settings.outputMode === 'mux' && file.type === 'video') {
+        setFileStatus(file.id, 'muxing');
+        logs.addLog('info', `Fazendo mux de ${file.name}...`, file.name);
+        
+        const outputVideoPath = file.path.replace(/\.[^/.]+$/, '.muxed.mkv');
+        
+        await TauriUtils.muxSubtitleToVideo(
+          file.path,
+          outputSubtitlePath,
+          outputVideoPath,
+          muxLanguage,
+          muxTitle
+        );
+        
+        updateFile(file.id, { outputVideoPath });
+        logs.addLog('success', `Vídeo muxado salvo em: ${outputVideoPath}`, file.name);
+      }
+
       setFileStatus(file.id, 'completed');
-      logs.addLog('success', `${file.name} traduzido com sucesso!`, file.name);
+      logs.addLog('success', `${file.name} processado com sucesso!`, file.name);
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       setFileStatus(file.id, 'error', errorMsg);
-      logs.addLog('error', `Erro ao traduzir ${file.name}: ${errorMsg}`, file.name);
+      logs.addLog('error', `Erro ao processar ${file.name}: ${errorMsg}`, file.name);
 
       if (!settings.continueOnError) {
         get().pauseTranslation();

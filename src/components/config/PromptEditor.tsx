@@ -4,7 +4,9 @@ import { useSettingsStore } from '../../stores/settingsStore';
 export function PromptEditor() {
   const { settings, updateSetting, templates } = useSettingsStore();
 
-  const applyTemplate = (templateId: string) => {
+  const applyTemplate = (key: React.Key | null) => {
+    if (!key) return;
+    const templateId = String(key);
     const template = templates.find((t) => t.id === templateId);
     if (template) {
       updateSetting('prompt', template.content);
@@ -21,20 +23,22 @@ export function PromptEditor() {
           <div className="flex gap-2">
             <Select
               aria-label="Selecionar template"
-              selectedKey={settings.selectedTemplateId || ''}
-              onSelectionChange={(key) => applyTemplate(key as string)}
+              selectedKey={settings.selectedTemplateId || undefined}
+              onSelectionChange={applyTemplate}
               className="flex-1"
               placeholder="Aplicar template..."
             >
               <Label>Template</Label>
               <Select.Trigger>
                 <Select.Value />
+                <Select.Indicator />
               </Select.Trigger>
               <Select.Popover>
                 <ListBox>
                   {templates.map((template) => (
-                    <ListBox.Item key={template.id} textValue={template.name}>
+                    <ListBox.Item id={template.id} key={template.id} textValue={template.name}>
                       {template.name}
+                      <ListBox.ItemIndicator />
                     </ListBox.Item>
                   ))}
                 </ListBox>
@@ -46,7 +50,7 @@ export function PromptEditor() {
         <TextArea
           value={settings.prompt}
           onChange={(e) => updateSetting('prompt', e.target.value)}
-          className="w-full"
+          className="w-full min-h-[150px]"
           placeholder="Digite o prompt de tradução..."
         />
 
