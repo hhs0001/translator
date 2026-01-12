@@ -405,7 +405,7 @@ impl LlmClient {
         let total = entries.len();
         let mut retries = 0;
 
-        let mut build_progress = |translations: &Vec<(usize, String)>| -> TranslationProgress {
+        let build_progress = |translations: &Vec<(usize, String)>| -> TranslationProgress {
             let translated_entries = translations.len();
             let last_translated_index = translations
                 .last()

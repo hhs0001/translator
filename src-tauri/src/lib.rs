@@ -8,7 +8,8 @@ use std::path::Path;
 use ffmpeg::SubtitleTrack;
 use serde::{Deserialize, Serialize};
 use subtitle::{SubtitleFile, SubtitleFormat};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
 use translator::{
     BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
     TranslationProgress, TranslationSettings,
@@ -193,13 +194,13 @@ async fn translate_subtitle_full(
             &texts,
             &settings,
             |progress| {
-                let _ = app.emit_all("translation:progress", progress.clone());
+                let _ = app.emit("translation:progress", progress.clone());
             },
             |retry| {
-                let _ = app.emit_all("translation:retry", retry.clone());
+                let _ = app.emit("translation:retry", retry.clone());
             },
             |error| {
-                let _ = app.emit_all("translation:error", error.clone());
+                let _ = app.emit("translation:error", error.clone());
             },
         )
         .await?;

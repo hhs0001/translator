@@ -27,6 +27,15 @@
 - UI deve usar HeroUI (Hero UI v3).
 - Entregar plano em arquivo `.md` no repositório; aceitar sugestões.
 
+## Resumo do Plano UI
+- **Navegação**: navbar com tabs `Tradução` e `Configurações` e acesso aos logs.
+- **Entrada de arquivos**: modos **single**/**batch** com drag-and-drop.
+- **Fluxo de tradução**: fila com status e split view original/tradução.
+- **Configurações**: API, modelo, prompt, templates e persistência de settings.
+- **Resiliência**: auto-continue, retries e backup obrigatório.
+- **Saída**: mux no vídeo ou arquivo separado, mantendo formato original.
+- **Monitoramento**: drawer de logs com níveis e filtros.
+
 ## Technical Decisions
 - Stack frontend atual: React + Vite + HeroUI + Tailwind (baseado em `src/main.tsx` e `src/App.tsx`).
 - Persistência de templates já existe no backend via Tauri (commands `load_templates`, `add_template`, `update_template`, `delete_template`).
