@@ -1,4 +1,4 @@
-import { Button, Chip, Tabs, TabList, Tab } from '@heroui/react';
+import { Button, Chip, Tabs } from '@heroui/react';
 import { useTranslationStore } from '../../stores/translationStore';
 import { useLogsStore } from '../../stores/logsStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -15,9 +15,10 @@ export function Navbar({ activeTab, onTabChange }: Props) {
 
   const pendingCount = queue.filter((f) => f.status === 'pending').length;
   const errorCount = logs.filter((l) => l.level === 'error').length;
+  const isProcessing = queue.some(f => f.status === 'translating' || f.status === 'extracting');
 
   const handleTranslateClick = () => {
-    if (isTranslating) {
+    if (isProcessing) {
       if (isPaused) {
         resumeTranslation();
       } else {
@@ -29,9 +30,10 @@ export function Navbar({ activeTab, onTabChange }: Props) {
   };
 
   const getTranslateButtonText = () => {
-    if (!isTranslating) return 'Traduzir';
+    if (!isTranslating && !isProcessing) return 'Traduzir';
     if (isPaused) return 'Retomar';
-    return 'Pausar';
+    if (isProcessing) return 'Pausar';
+    return 'Traduzir';
   };
 
   return (
@@ -40,16 +42,24 @@ export function Navbar({ activeTab, onTabChange }: Props) {
         <div className="flex items-center gap-6">
           <h1 className="text-xl font-bold">SubTranslator</h1>
 
-          <Tabs
+          <Tabs.Root
             selectedKey={activeTab}
             onSelectionChange={(key) => onTabChange(key as string)}
             className="hidden sm:flex"
           >
-            <TabList>
-              <Tab key="translation">Tradução</Tab>
-              <Tab key="config">Configurações</Tab>
-            </TabList>
-          </Tabs>
+            <Tabs.ListContainer>
+              <Tabs.List>
+                <Tabs.Tab id="translation">
+                  Tradução
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+                <Tabs.Tab id="config">
+                  Configurações
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs.ListContainer>
+          </Tabs.Root>
         </div>
 
         <div className="flex items-center gap-3">
@@ -70,7 +80,7 @@ export function Navbar({ activeTab, onTabChange }: Props) {
           )}
 
           <Button
-            variant={isTranslating && !isPaused ? 'secondary' : 'primary'}
+            variant={isProcessing && !isPaused ? 'secondary' : 'primary'}
             onPress={handleTranslateClick}
             isDisabled={queue.length === 0 && !isTranslating}
           >

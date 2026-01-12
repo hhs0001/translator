@@ -1,8 +1,10 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
-import { QueueFile, FileStatus, SubtitleFile } from '../types';
+import { QueueFile, FileStatus } from '../types';
 import { useLogsStore } from './logsStore';
 import { useSettingsStore } from './settingsStore';
+import * as TauriUtils from '../utils/tauri';
+import { listen } from '@tauri-apps/api/event';
+import { useEffect } from 'react';
 
 interface TranslationState {
   queue: QueueFile[];
@@ -10,23 +12,19 @@ interface TranslationState {
   isTranslating: boolean;
   isPaused: boolean;
 
-  // Queue management
   addFiles: (files: { name: string; path: string; type: 'subtitle' | 'video' }[]) => void;
   removeFile: (id: string) => void;
   clearQueue: () => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
 
-  // File state
   updateFile: (id: string, updates: Partial<QueueFile>) => void;
   setFileStatus: (id: string, status: FileStatus, error?: string) => void;
 
-  // Translation control
   startTranslation: () => Promise<void>;
   pauseTranslation: () => void;
   resumeTranslation: () => void;
   stopTranslation: () => void;
 
-  // Internal
   processNextFile: () => Promise<void>;
   translateFile: (file: QueueFile) => Promise<void>;
 }
@@ -121,14 +119,12 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       return;
     }
 
-    // Process up to `concurrency` files
     const filesToProcess = pendingFiles.slice(0, settings.concurrency);
 
     await Promise.all(
       filesToProcess.map((file) => get().translateFile(file))
     );
 
-    // Continue with next batch
     if (get().isTranslating && !get().isPaused) {
       await get().processNextFile();
     }
@@ -142,46 +138,36 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     try {
       set({ currentFileId: file.id });
 
-      // Step 1: If video, extract subtitle
       let subtitlePath = file.path;
       if (file.type === 'video') {
         setFileStatus(file.id, 'extracting');
         logs.addLog('info', `Extraindo legenda de ${file.name}...`, file.name);
 
         const trackIndex = file.selectedTrackIndex ?? 0;
-        subtitlePath = await invoke<string>('extract_subtitle_track', {
-          videoPath: file.path,
-          trackIndex,
-        });
+        await TauriUtils.extractSubtitleTrack(file.path, trackIndex);
+        subtitlePath = file.path.replace(/\.[^/.]+$/, '.srt');
         updateFile(file.id, { extractedSubtitlePath: subtitlePath });
       }
 
-      // Step 2: Load subtitle
-      const subtitle = await invoke<SubtitleFile>('load_subtitle', {
-        path: subtitlePath,
-      });
+      const subtitle = await TauriUtils.loadSubtitle(subtitlePath);
       updateFile(file.id, {
         originalSubtitle: subtitle,
         totalLines: subtitle.entries.length,
       });
 
-      // Step 3: Translate
       setFileStatus(file.id, 'translating');
       logs.addLog('info', `Traduzindo ${file.name} (${subtitle.entries.length} linhas)...`, file.name);
 
       const model = settings.customModel || settings.model;
-      const result = await invoke<{
-        translated_entries: typeof subtitle.entries;
-        is_partial: boolean;
-      }>('translate_subtitle_full', {
+      const result = await TauriUtils.translateSubtitleFull(
         subtitle,
-        prompt: settings.prompt,
-        baseUrl: settings.baseUrl,
-        apiKey: settings.apiKey,
+        settings.prompt,
+        settings.baseUrl,
+        settings.apiKey,
         model,
-        batchSize: settings.batchSize,
-        headers: settings.headers.reduce((acc, h) => ({ ...acc, [h.key]: h.value }), {}),
-      });
+        settings.batchSize,
+        settings.headers.reduce((acc, h) => ({ ...acc, [h.key]: h.value }), {})
+      );
 
       updateFile(file.id, {
         translatedEntries: result.translated_entries,
@@ -189,10 +175,8 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         progress: 100,
       });
 
-      // Step 4: Handle partial
       if (result.is_partial && settings.autoContinue) {
         logs.addLog('warning', `Tradução parcial, continuando...`, file.name);
-        // Continue translation logic here
       }
 
       setFileStatus(file.id, 'completed');
@@ -209,3 +193,40 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     }
   },
 }));
+
+export function useTranslationEvents() {
+  useEffect(() => {
+    let unlistenProgress: (() => void) | null = null;
+    let unlistenError: (() => void) | null = null;
+
+    const setupListeners = async () => {
+      try {
+        unlistenProgress = await listen<{ file_id: string; progress: number; translated: number; total: number }>(
+          'translation:progress',
+          (event) => {
+            const { progress, translated, total } = event.payload;
+            const store = useTranslationStore.getState();
+            store.updateFile(event.payload.file_id, { progress, translatedLines: translated, totalLines: total });
+          }
+        );
+
+        unlistenError = await listen<{ file_id: string; error: string; retry_count: number }>(
+          'translation:error',
+          (event) => {
+            const { error, retry_count } = event.payload;
+            useLogsStore.getState().addLog('warning', `Erro (tentativa ${retry_count}): ${error}`);
+          }
+        );
+      } catch (error) {
+        console.error('Failed to setup translation event listeners:', error);
+      }
+    };
+
+    setupListeners();
+
+    return () => {
+      unlistenProgress?.();
+      unlistenError?.();
+    };
+  }, []);
+}

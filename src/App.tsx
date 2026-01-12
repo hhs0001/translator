@@ -3,14 +3,16 @@ import { MainLayout } from './components/layout/MainLayout';
 import { TranslationPage } from './components/translation/TranslationPage';
 import { ConfigPage } from './components/config/ConfigPage';
 import { useSettingsStore } from './stores/settingsStore';
+import { useTranslationEvents } from './stores/translationStore';
 import './App.css';
 
 function App() {
   const [activeTab, setActiveTab] = useState('translation');
   const { loadSettings, loadTemplates, checkFfmpeg } = useSettingsStore();
 
+  useTranslationEvents();
+
   useEffect(() => {
-    // Load all data on startup
     loadSettings();
     loadTemplates();
     checkFfmpeg();

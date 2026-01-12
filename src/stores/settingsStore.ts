@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { invoke } from '@tauri-apps/api/core';
 import { AppSettings, DEFAULT_SETTINGS, Template } from '../types';
+import * as TauriUtils from '../utils/tauri';
 
 interface SettingsState {
   settings: AppSettings;
@@ -8,18 +8,15 @@ interface SettingsState {
   isLoading: boolean;
   ffmpegInstalled: boolean | null;
 
-  // Actions
   loadSettings: () => Promise<void>;
   saveSettings: (settings: Partial<AppSettings>) => Promise<void>;
   updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
 
-  // Templates
   loadTemplates: () => Promise<void>;
   addTemplate: (name: string, content: string) => Promise<void>;
   updateTemplate: (id: string, name: string, content: string) => Promise<void>;
   deleteTemplate: (id: string) => Promise<void>;
 
-  // FFmpeg
   checkFfmpeg: () => Promise<boolean>;
 }
 
@@ -31,7 +28,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadSettings: async () => {
     try {
-      const settings = await invoke<AppSettings>('load_settings');
+      const settings = await TauriUtils.loadSettings();
       set({ settings: { ...DEFAULT_SETTINGS, ...settings }, isLoading: false });
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -43,7 +40,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const merged = { ...get().settings, ...newSettings };
     set({ settings: merged });
     try {
-      await invoke('save_settings', { settings: merged });
+      await TauriUtils.saveSettings(merged);
     } catch (error) {
       console.error('Failed to save settings:', error);
     }
@@ -52,13 +49,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   updateSetting: (key, value) => {
     const newSettings = { ...get().settings, [key]: value };
     set({ settings: newSettings });
-    // Debounce save
-    invoke('save_settings', { settings: newSettings }).catch(console.error);
+    TauriUtils.saveSettings(newSettings).catch(console.error);
   },
 
   loadTemplates: async () => {
     try {
-      const templates = await invoke<Template[]>('load_templates');
+      const templates = await TauriUtils.loadTemplates();
       set({ templates });
     } catch (error) {
       console.error('Failed to load templates:', error);
@@ -67,7 +63,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   addTemplate: async (name, content) => {
     try {
-      await invoke('add_template', { name, content });
+      await TauriUtils.addTemplate(name, content);
       await get().loadTemplates();
     } catch (error) {
       console.error('Failed to add template:', error);
@@ -77,7 +73,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   updateTemplate: async (id, name, content) => {
     try {
-      await invoke('update_template', { id, name, content });
+      await TauriUtils.updateTemplate(id, name, content);
       await get().loadTemplates();
     } catch (error) {
       console.error('Failed to update template:', error);
@@ -87,7 +83,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   deleteTemplate: async (id) => {
     try {
-      await invoke('delete_template', { id });
+      await TauriUtils.deleteTemplate(id);
       await get().loadTemplates();
     } catch (error) {
       console.error('Failed to delete template:', error);
@@ -97,7 +93,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   checkFfmpeg: async () => {
     try {
-      const installed = await invoke<boolean>('check_ffmpeg_installed');
+      const result = await TauriUtils.checkFfmpegInstalled();
+      const installed = result !== null && result !== '';
       set({ ffmpegInstalled: installed });
       return installed;
     } catch (error) {

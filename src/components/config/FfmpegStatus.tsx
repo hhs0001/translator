@@ -1,16 +1,24 @@
 import { Card, Button, Chip, Alert } from '@heroui/react';
+import { useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export function FfmpegStatus() {
   const { ffmpegInstalled, checkFfmpeg } = useSettingsStore();
+  const [isChecking, setIsChecking] = useState(false);
+
+  const handleCheck = async () => {
+    setIsChecking(true);
+    await checkFfmpeg();
+    setIsChecking(false);
+  };
 
   return (
     <Card className="p-6">
       <h3 className="text-lg font-semibold mb-4">FFmpeg</h3>
 
       <div className="flex items-center gap-4">
-        <Button onPress={checkFfmpeg}>
-          Verificar FFmpeg
+        <Button onPress={handleCheck} isDisabled={isChecking}>
+          {isChecking ? 'Verificando...' : 'Verificar FFmpeg'}
         </Button>
 
         {ffmpegInstalled !== null && (

@@ -10,7 +10,7 @@ export function TranslationPage() {
 
   return (
     <div className="space-y-6">
-      <Tabs className="w-full">
+      <Tabs.Root className="w-full">
         <Tabs.ListContainer>
           <Tabs.List aria-label="Modo de tradução">
             <Tabs.Tab id="single">
@@ -42,7 +42,7 @@ export function TranslationPage() {
             <FileQueue />
           </div>
         </Tabs.Panel>
-      </Tabs>
+      </Tabs.Root>
     </div>
   );
 }

@@ -9,6 +9,8 @@ export function TemplateManager() {
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
   const [name, setName] = useState('');
   const [content, setContent] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
   const openNewModal = () => {
     setEditingTemplate(null);
@@ -27,6 +29,7 @@ export function TemplateManager() {
   const handleSave = async () => {
     if (!name.trim() || !content.trim()) return;
 
+    setIsSaving(true);
     try {
       if (editingTemplate) {
         await updateTemplate(editingTemplate.id, name, content);
@@ -36,12 +39,21 @@ export function TemplateManager() {
       setIsModalOpen(false);
     } catch (error) {
       console.error('Failed to save template:', error);
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Tem certeza que deseja excluir este template?')) {
+    if (!confirm('Tem certeza que deseja excluir este template?')) return;
+
+    setIsDeleting(id);
+    try {
       await deleteTemplate(id);
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+    } finally {
+      setIsDeleting(null);
     }
   };
 
@@ -79,8 +91,9 @@ export function TemplateManager() {
                   size="sm"
                   variant="danger"
                   onPress={() => handleDelete(template.id)}
+                  isDisabled={isDeleting === template.id}
                 >
-                  Excluir
+                  {isDeleting === template.id ? '...' : 'Excluir'}
                 </Button>
               </div>
             </div>
@@ -122,8 +135,8 @@ export function TemplateManager() {
               <Button variant="ghost" onPress={() => setIsModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button variant="primary" onPress={handleSave}>
-                Salvar
+              <Button variant="primary" onPress={handleSave} isDisabled={isSaving}>
+                {isSaving ? 'Salvando...' : 'Salvar'}
               </Button>
             </Modal.Footer>
             <Modal.CloseTrigger />
