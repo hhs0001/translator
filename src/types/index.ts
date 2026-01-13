@@ -2,10 +2,13 @@
 // SETTINGS
 // ============================================
 
+export type ApiFormat = 'openai' | 'anthropic' | 'auto';
+
 export interface AppSettings {
   // API
   baseUrl: string;
   apiKey: string;
+  apiFormat: ApiFormat;
   headers: Header[];
   model: string;
   customModel: string;
@@ -41,6 +44,7 @@ export interface Header {
 export const DEFAULT_SETTINGS: AppSettings = {
   baseUrl: 'http://localhost:8045/v1',
   apiKey: '',
+  apiFormat: 'auto',
   headers: [],
   model: '',
   customModel: '',
@@ -79,6 +83,10 @@ export interface LLMModel {
   id: string;
   object: string;
   owned_by?: string;
+  // Campos adicionais do OpenRouter
+  name?: string;
+  description?: string;
+  context_length?: number;
 }
 
 // ============================================

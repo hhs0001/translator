@@ -1,11 +1,11 @@
 import { Card, Input, Select, Label, ListBox, Accordion, Button } from '@heroui/react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useModels } from '../../hooks/useModels';
-import { Header } from '../../types';
+import { Header, ApiFormat } from '../../types';
 
 export function ApiSettings() {
   const { settings, updateSetting } = useSettingsStore();
-  const { models, isLoading, error, refetch } = useModels();
+  const { models, isLoading, error, refetch, detectedFormat } = useModels();
 
   const addHeader = () => {
     const newHeader: Header = {
@@ -33,9 +33,17 @@ export function ApiSettings() {
     }
   };
 
+  const handleFormatChange = (key: React.Key | null) => {
+    if (key) {
+      updateSetting('apiFormat', key as ApiFormat);
+    }
+  };
+
+  const formatDisplayName = detectedFormat === 'anthropic' ? 'Anthropic' : 'OpenAI';
+
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">Conexão com API</h3>
+      <h3 className="text-lg font-semibold mb-4">Conexao com API</h3>
 
       <div className="space-y-4">
         <div>
@@ -47,7 +55,45 @@ export function ApiSettings() {
             className="w-full"
           />
           <p className="text-xs text-default-500 mt-1">
-            O endpoint /chat/completions será adicionado automaticamente
+            O endpoint sera adicionado automaticamente.
+            <span className="ml-2 px-2 py-0.5 rounded bg-default-100 text-default-600 font-medium">
+              Formato: {formatDisplayName}
+            </span>
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Formato da API</label>
+          <Select
+            aria-label="Formato da API"
+            selectedKey={settings.apiFormat}
+            onSelectionChange={handleFormatChange}
+            className="w-full"
+          >
+            <Label className="sr-only">Formato da API</Label>
+            <Select.Trigger>
+              <Select.Value />
+              <Select.Indicator />
+            </Select.Trigger>
+            <Select.Popover>
+              <ListBox>
+                <ListBox.Item id="auto" key="auto" textValue="Auto-detectar">
+                  Auto-detectar
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+                <ListBox.Item id="openai" key="openai" textValue="OpenAI Compatible">
+                  OpenAI Compatible
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+                <ListBox.Item id="anthropic" key="anthropic" textValue="Anthropic">
+                  Anthropic
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              </ListBox>
+            </Select.Popover>
+          </Select>
+          <p className="text-xs text-default-500 mt-1">
+            Selecione o formato da API ou deixe em auto-detectar
           </p>
         </div>
 
@@ -55,7 +101,7 @@ export function ApiSettings() {
           <label className="block text-sm font-medium mb-1">API Key</label>
           <Input
             type="password"
-            placeholder="sk-..."
+            placeholder={detectedFormat === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
             value={settings.apiKey}
             onChange={(e) => updateSetting('apiKey', e.target.value)}
             className="w-full"
@@ -80,17 +126,28 @@ export function ApiSettings() {
               </Select.Trigger>
               <Select.Popover>
                 <ListBox>
-                  {models.map((model) => (
-                    <ListBox.Item id={model.id} key={model.id} textValue={model.id}>
-                      {model.id}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
+                  {models.map((model) => {
+                    const displayName = model.name || model.id;
+                    const contextInfo = model.context_length
+                      ? ` (${Math.round(model.context_length / 1000)}k ctx)`
+                      : '';
+                    return (
+                      <ListBox.Item id={model.id} key={model.id} textValue={displayName}>
+                        <div className="flex flex-col">
+                          <span>{displayName}{contextInfo}</span>
+                          {model.name && (
+                            <span className="text-xs text-default-400">{model.id}</span>
+                          )}
+                        </div>
+                        <ListBox.ItemIndicator />
+                      </ListBox.Item>
+                    );
+                  })}
                 </ListBox>
               </Select.Popover>
             </Select>
             <Button variant="ghost" onPress={refetch} isDisabled={isLoading}>
-              ↻
+              {String.fromCodePoint(0x21bb)}
             </Button>
           </div>
           {error && <p className="text-xs text-danger mt-1">{error}</p>}
@@ -99,27 +156,27 @@ export function ApiSettings() {
         <div>
           <label className="block text-sm font-medium mb-1">Modelo Customizado (opcional)</label>
           <Input
-            placeholder="gpt-4-turbo"
+            placeholder={detectedFormat === 'anthropic' ? 'claude-sonnet-4-5-20250929' : 'gpt-4-turbo'}
             value={settings.customModel}
             onChange={(e) => updateSetting('customModel', e.target.value)}
             className="w-full"
           />
           <p className="text-xs text-default-500 mt-1">
-            Se preenchido, será usado em vez do modelo selecionado acima
+            Se preenchido, sera usado em vez do modelo selecionado acima
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Modelo para Detecção de Idioma (opcional)</label>
+          <label className="block text-sm font-medium mb-1">Modelo para Deteccao de Idioma (opcional)</label>
           <Select
-            aria-label="Modelo para detecção de idioma"
+            aria-label="Modelo para deteccao de idioma"
             selectedKey={settings.languageDetectionModel || undefined}
             onSelectionChange={(key) => updateSetting('languageDetectionModel', key ? String(key) : '')}
             className="w-full"
             isDisabled={isLoading || models.length === 0}
-            placeholder="Nenhum (usar configuração manual)"
+            placeholder="Nenhum (usar configuracao manual)"
           >
-            <Label className="sr-only">Modelo para Detecção</Label>
+            <Label className="sr-only">Modelo para Deteccao</Label>
             <Select.Trigger>
               <Select.Value />
               <Select.Indicator />
@@ -127,20 +184,28 @@ export function ApiSettings() {
             <Select.Popover>
               <ListBox>
                 <ListBox.Item id="" key="none" textValue="Nenhum">
-                  Nenhum (usar configuração manual)
+                  Nenhum (usar configuracao manual)
                   <ListBox.ItemIndicator />
                 </ListBox.Item>
-                {models.map((model) => (
-                  <ListBox.Item id={model.id} key={model.id} textValue={model.id}>
-                    {model.id}
-                    <ListBox.ItemIndicator />
-                  </ListBox.Item>
-                ))}
+                {models.map((model) => {
+                  const displayName = model.name || model.id;
+                  return (
+                    <ListBox.Item id={model.id} key={model.id} textValue={displayName}>
+                      <div className="flex flex-col">
+                        <span>{displayName}</span>
+                        {model.name && (
+                          <span className="text-xs text-default-400">{model.id}</span>
+                        )}
+                      </div>
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>
+                  );
+                })}
               </ListBox>
             </Select.Popover>
           </Select>
           <p className="text-xs text-default-500 mt-1">
-            Modelo leve para detectar o idioma da tradução e usar no mux (ex: gemma-3-1b)
+            Modelo leve para detectar o idioma da traducao e usar no mux (ex: gemma-3-1b)
           </p>
         </div>
 
@@ -148,7 +213,7 @@ export function ApiSettings() {
           <Accordion.Item id="headers">
             <Accordion.Heading>
               <Accordion.Trigger>
-                Headers Avançados
+                Headers Avancados
                 <Accordion.Indicator />
               </Accordion.Trigger>
             </Accordion.Heading>
@@ -174,7 +239,7 @@ export function ApiSettings() {
                         size="sm"
                         onPress={() => removeHeader(header.id)}
                       >
-                        ✕
+                        {String.fromCodePoint(0x2715)}
                       </Button>
                     </div>
                   ))}

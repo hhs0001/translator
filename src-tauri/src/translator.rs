@@ -2,6 +2,18 @@ use futures::future::join_all;
 use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 
+/// Formato da API LLM
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ApiFormat {
+    #[default]
+    #[serde(alias = "openai")]
+    OpenAI,
+    #[serde(alias = "anthropic")]
+    Anthropic,
+    #[serde(alias = "auto")]
+    Auto,
+}
 
 /// Configuração do cliente LLM
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -10,6 +22,8 @@ pub struct LlmConfig {
     pub endpoint: String,
     pub api_key: String,
     pub model: String,
+    #[serde(default)]
+    pub api_format: ApiFormat,
     #[serde(default)]
     pub headers: Vec<(String, String)>,
 }
@@ -21,23 +35,50 @@ impl Default for LlmConfig {
             endpoint: "http://localhost:8317/v1/chat/completions".to_string(),
             api_key: "dummy".to_string(),
             model: "gemini-2.5-pro".to_string(),
+            api_format: ApiFormat::default(),
             headers: Vec::new(),
         }
     }
 }
 
-fn normalize_endpoint(endpoint: &str) -> String {
+fn detect_api_format(endpoint: &str, configured_format: &ApiFormat) -> ApiFormat {
+    if *configured_format != ApiFormat::Auto {
+        return configured_format.clone();
+    }
+
+    let lower = endpoint.to_lowercase();
+    if lower.contains("anthropic") || lower.ends_with("/messages") || lower.contains("/v1/messages") {
+        ApiFormat::Anthropic
+    } else {
+        ApiFormat::OpenAI
+    }
+}
+
+fn normalize_endpoint_for_format(endpoint: &str, format: &ApiFormat) -> String {
     let trimmed = endpoint.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return String::new();
     }
 
-    if trimmed.ends_with("/chat/completions") {
-        trimmed.to_string()
-    } else if trimmed.ends_with("/v1") {
-        format!("{}/chat/completions", trimmed)
-    } else {
-        format!("{}/chat/completions", trimmed)
+    match format {
+        ApiFormat::Anthropic => {
+            if trimmed.ends_with("/messages") {
+                trimmed.to_string()
+            } else if trimmed.ends_with("/v1") {
+                format!("{}/messages", trimmed)
+            } else {
+                format!("{}/messages", trimmed)
+            }
+        }
+        ApiFormat::OpenAI | ApiFormat::Auto => {
+            if trimmed.ends_with("/chat/completions") {
+                trimmed.to_string()
+            } else if trimmed.ends_with("/v1") {
+                format!("{}/chat/completions", trimmed)
+            } else {
+                format!("{}/chat/completions", trimmed)
+            }
+        }
     }
 }
 
@@ -131,12 +172,21 @@ pub struct BatchTranslationResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmModel {
     pub id: String,
+    /// OpenAI usa "object", Anthropic usa "type"
+    #[serde(default, alias = "type")]
     pub object: String,
     #[serde(default)]
     pub owned_by: Option<String>,
+    /// OpenRouter usa "name", Anthropic usa "display_name"
+    #[serde(default, alias = "display_name")]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub context_length: Option<u64>,
 }
 
-/// Resposta da API /models
+/// Resposta da API /models (OpenAI e Anthropic)
 #[derive(Debug, Deserialize)]
 struct ModelsResponse {
     data: Vec<LlmModel>,
@@ -168,6 +218,34 @@ struct ChatChoice {
     message: ChatMessage,
 }
 
+// Anthropic API structs
+#[derive(Debug, Serialize)]
+struct AnthropicRequest {
+    model: String,
+    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<String>,
+    messages: Vec<AnthropicMessage>,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicMessage {
+    role: String,
+    content: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicResponse {
+    content: Vec<AnthropicContent>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AnthropicContent {
+    #[serde(rename = "type")]
+    content_type: String,
+    text: String,
+}
+
 /// Cliente para comunicação com a API LLM
 pub struct LlmClient {
     client: Client,
@@ -176,21 +254,38 @@ pub struct LlmClient {
 
 impl LlmClient {
     pub fn new(mut config: LlmConfig) -> Self {
-        config.endpoint = normalize_endpoint(&config.endpoint);
+        let detected_format = detect_api_format(&config.endpoint, &config.api_format);
+        config.endpoint = normalize_endpoint_for_format(&config.endpoint, &detected_format);
+        config.api_format = detected_format;
         Self {
             client: Client::new(),
             config,
         }
     }
 
+    /// Retorna o formato de API em uso
+    pub fn get_api_format(&self) -> &ApiFormat {
+        &self.config.api_format
+    }
+
     fn apply_headers(&self, builder: RequestBuilder) -> RequestBuilder {
         let mut builder = builder;
 
-        if !self.config.api_key.trim().is_empty() {
-            builder = builder.header(
-                "Authorization",
-                format!("Bearer {}", self.config.api_key),
-            );
+        match self.config.api_format {
+            ApiFormat::Anthropic => {
+                if !self.config.api_key.trim().is_empty() {
+                    builder = builder.header("X-Api-Key", &self.config.api_key);
+                }
+                builder = builder.header("anthropic-version", "2023-06-01");
+            }
+            ApiFormat::OpenAI | ApiFormat::Auto => {
+                if !self.config.api_key.trim().is_empty() {
+                    builder = builder.header(
+                        "Authorization",
+                        format!("Bearer {}", self.config.api_key),
+                    );
+                }
+            }
         }
 
         for (key, value) in &self.config.headers {
@@ -205,13 +300,13 @@ impl LlmClient {
     }
 
     /// Lista modelos disponíveis na API
-
     pub async fn list_models(&self) -> Result<Vec<LlmModel>, String> {
-        // Constrói URL para /models
+        // Constrói URL base removendo sufixos de endpoint
         let base_url = self
             .config
             .endpoint
             .trim_end_matches("/chat/completions")
+            .trim_end_matches("/messages")
             .trim_end_matches('/');
         let models_url = format!("{}/models", base_url);
 
@@ -220,7 +315,6 @@ impl LlmClient {
             .send()
             .await
             .map_err(|e| format!("Failed to fetch models: {}", e))?;
-
 
         if !response.status().is_success() {
             let status = response.status();
@@ -238,6 +332,20 @@ impl LlmClient {
 
     /// Envia mensagem para tradução
     pub async fn translate(
+        &self,
+        system_prompt: &str,
+        subtitle_content: &str,
+    ) -> Result<String, String> {
+        match self.config.api_format {
+            ApiFormat::Anthropic => self.translate_anthropic(system_prompt, subtitle_content).await,
+            ApiFormat::OpenAI | ApiFormat::Auto => {
+                self.translate_openai(system_prompt, subtitle_content).await
+            }
+        }
+    }
+
+    /// Tradução usando formato OpenAI
+    async fn translate_openai(
         &self,
         system_prompt: &str,
         subtitle_content: &str,
@@ -271,7 +379,6 @@ impl LlmClient {
             .await
             .map_err(|e| format!("Translation request failed: {}", e))?;
 
-
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
@@ -290,6 +397,63 @@ impl LlmClient {
             .ok_or_else(|| "No response from model".to_string())?;
 
         Ok(content)
+    }
+
+    /// Tradução usando formato Anthropic
+    async fn translate_anthropic(
+        &self,
+        system_prompt: &str,
+        subtitle_content: &str,
+    ) -> Result<String, String> {
+        let user_content = if subtitle_content.is_empty() {
+            system_prompt.to_string()
+        } else {
+            subtitle_content.to_string()
+        };
+
+        let system = if subtitle_content.is_empty() {
+            None
+        } else {
+            Some(system_prompt.to_string())
+        };
+
+        let request = AnthropicRequest {
+            model: self.config.model.clone(),
+            max_tokens: 8192,
+            system,
+            messages: vec![AnthropicMessage {
+                role: "user".to_string(),
+                content: user_content,
+            }],
+        };
+
+        let response = self
+            .apply_headers(
+                self.client
+                    .post(&self.config.endpoint)
+                    .header("Content-Type", "application/json"),
+            )
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| format!("Translation request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(format!("Translation API error {}: {}", status, body));
+        }
+
+        let anthropic_response: AnthropicResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse translation response: {}", e))?;
+
+        anthropic_response
+            .content
+            .first()
+            .map(|c| c.text.clone())
+            .ok_or_else(|| "No response from model".to_string())
     }
 
     /// Traduz legendas em batch, preservando a estrutura
