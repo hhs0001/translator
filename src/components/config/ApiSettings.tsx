@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import { Card, Input, Select, Label, ListBox, Accordion, Button } from '@heroui/react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useModels } from '../../hooks/useModels';
@@ -6,6 +7,19 @@ import { Header, ApiFormat } from '../../types';
 export function ApiSettings() {
   const { settings, updateSetting } = useSettingsStore();
   const { models, isLoading, error, refetch, detectedFormat } = useModels();
+  const [modelSearch, setModelSearch] = useState('');
+
+  const filteredModels = useMemo(() => {
+    const query = modelSearch.trim().toLowerCase();
+    if (!query) {
+      return models;
+    }
+    return models.filter((model) => {
+      const name = model.name?.toLowerCase() || '';
+      const id = model.id.toLowerCase();
+      return name.includes(query) || id.includes(query);
+    });
+  }, [modelSearch, models]);
 
   const addHeader = () => {
     const newHeader: Header = {
@@ -110,6 +124,13 @@ export function ApiSettings() {
 
         <div>
           <label className="block text-sm font-medium mb-1">Modelo</label>
+          <Input
+            placeholder="Pesquisar modelos"
+            value={modelSearch}
+            onChange={(e) => setModelSearch(e.target.value)}
+            className="w-full mb-2"
+            isDisabled={isLoading || models.length === 0}
+          />
           <div className="flex gap-2">
             <Select
               aria-label="Selecionar modelo"
@@ -126,23 +147,37 @@ export function ApiSettings() {
               </Select.Trigger>
               <Select.Popover>
                 <ListBox>
-                  {models.map((model) => {
-                    const displayName = model.name || model.id;
-                    const contextInfo = model.context_length
-                      ? ` (${Math.round(model.context_length / 1000)}k ctx)`
-                      : '';
-                    return (
-                      <ListBox.Item id={model.id} key={model.id} textValue={displayName}>
-                        <div className="flex flex-col">
-                          <span>{displayName}{contextInfo}</span>
-                          {model.name && (
-                            <span className="text-xs text-default-400">{model.id}</span>
-                          )}
-                        </div>
-                        <ListBox.ItemIndicator />
-                      </ListBox.Item>
-                    );
-                  })}
+                  {filteredModels.length === 0 ? (
+                    <ListBox.Item
+                      id="no-results"
+                      key="no-results"
+                      textValue="Nenhum modelo encontrado"
+                      isDisabled
+                    >
+                      Nenhum modelo encontrado
+                    </ListBox.Item>
+                  ) : (
+                    filteredModels.map((model) => {
+                      const displayName = model.name || model.id;
+                      const contextInfo = model.context_length
+                        ? ` (${Math.round(model.context_length / 1000)}k ctx)`
+                        : '';
+                      return (
+                        <ListBox.Item id={model.id} key={model.id} textValue={displayName}>
+                          <div className="flex flex-col">
+                            <span>
+                              {displayName}
+                              {contextInfo}
+                            </span>
+                            {model.name && (
+                              <span className="text-xs text-default-400">{model.id}</span>
+                            )}
+                          </div>
+                          <ListBox.ItemIndicator />
+                        </ListBox.Item>
+                      );
+                    })
+                  )}
                 </ListBox>
               </Select.Popover>
             </Select>
