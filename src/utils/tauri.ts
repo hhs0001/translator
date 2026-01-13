@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { AppSettings, SubtitleTranslationResult, DetectedLanguage } from '../types';
+import { AppSettings, SubtitleTranslationResult, DetectedLanguage, ApiFormat } from '../types';
 import { Template, LLMModel, SubtitleFile, SubtitleTrack } from '../types';
 
 export async function loadSettings(): Promise<AppSettings> {
@@ -26,12 +26,18 @@ export async function deleteTemplate(id: string): Promise<void> {
   return invoke('delete_template', { templateId: id });
 }
 
-export async function listLLMModels(baseUrl: string, apiKey: string): Promise<LLMModel[]> {
+export async function listLLMModels(
+  baseUrl: string,
+  apiKey: string,
+  apiFormat: ApiFormat = 'auto',
+  headers: Record<string, string> = {}
+): Promise<LLMModel[]> {
   return invoke<LLMModel[]>('list_llm_models', { 
     config: { 
       endpoint: baseUrl, 
       apiKey: apiKey || '', 
-      headers: [], 
+      apiFormat,
+      headers: Object.entries(headers),
       model: '' 
     } 
   });
@@ -80,6 +86,7 @@ export async function translateSubtitleFull(
   prompt: string,
   baseUrl: string,
   apiKey: string,
+  apiFormat: ApiFormat,
   model: string,
   headers: Record<string, string>,
   fileId: string,
@@ -89,6 +96,7 @@ export async function translateSubtitleFull(
     config: {
       endpoint: baseUrl,
       apiKey: apiKey || '',
+      apiFormat,
       headers: Object.entries(headers).map(([k, v]) => [k, v]),
       model,
     },
@@ -120,6 +128,7 @@ export async function getFileInfo(path: string): Promise<{ path: string; filenam
 export async function detectLanguage(
   baseUrl: string,
   apiKey: string,
+  apiFormat: ApiFormat,
   model: string,
   translationPrompt: string,
   headers: Record<string, string> = {}
@@ -128,6 +137,7 @@ export async function detectLanguage(
     config: {
       endpoint: baseUrl,
       apiKey: apiKey || '',
+      apiFormat,
       headers: Object.entries(headers).map(([k, v]) => [k, v]),
       model,
     },

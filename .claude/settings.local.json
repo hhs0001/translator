@@ -6,7 +6,9 @@
       "Bash(bun tsc:*)",
       "Bash(bun run build)",
       "Bash(bun run tsc:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:openrouter.ai)"
     ]
   }
 }

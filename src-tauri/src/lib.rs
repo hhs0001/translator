@@ -11,7 +11,7 @@ use subtitle::{SubtitleFile, SubtitleFormat};
 use tauri::{Emitter, Manager};
 
 use translator::{
-    BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
+    ApiFormat, BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
     TranslationProgress, TranslationSettings,
 };
 
@@ -395,6 +395,8 @@ struct AppSettings {
     #[serde(default)]
     api_key: String,
     #[serde(default)]
+    api_format: ApiFormat,
+    #[serde(default)]
     headers: Vec<HeaderItem>,
     #[serde(default)]
     model: String,
@@ -446,6 +448,7 @@ impl Default for AppSettings {
         Self {
             base_url: default_base_url(),
             api_key: String::new(),
+            api_format: ApiFormat::default(),
             headers: Vec::new(),
             model: String::new(),
             custom_model: String::new(),
