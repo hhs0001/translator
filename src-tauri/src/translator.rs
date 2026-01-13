@@ -1,3 +1,4 @@
+use futures::future::join_all;
 use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 
@@ -46,10 +47,16 @@ fn normalize_endpoint(endpoint: &str) -> String {
 #[serde(rename_all = "camelCase")]
 pub struct TranslationSettings {
     pub batch_size: usize,
+    #[serde(default = "default_parallel_requests")]
+    pub parallel_requests: usize,
     pub auto_continue: bool,
     #[serde(default)]
     pub continue_on_error: bool,
     pub max_retries: usize,
+}
+
+fn default_parallel_requests() -> usize {
+    1
 }
 
 
@@ -57,11 +64,11 @@ impl Default for TranslationSettings {
     fn default() -> Self {
         Self {
             batch_size: 50,
+            parallel_requests: 1,
             auto_continue: true,
             continue_on_error: false,
             max_retries: 3,
         }
-
     }
 }
 
@@ -391,7 +398,18 @@ impl LlmClient {
         })
     }
 
-    /// Traduz todas as legendas em batches, com suporte a auto-continue
+    /// Traduz um único batch (para uso em paralelo)
+    async fn translate_single_batch(
+        &self,
+        system_prompt: &str,
+        batch: Vec<(usize, String)>,
+        batch_index: usize,
+    ) -> (usize, Result<Vec<(usize, String)>, String>) {
+        let result = self.translate_subtitles(system_prompt, &batch).await;
+        (batch_index, result)
+    }
+
+    /// Traduz todas as legendas em batches, com suporte a paralelismo e auto-continue
     pub async fn translate_all_batched(
         &self,
         system_prompt: &str,
@@ -401,16 +419,25 @@ impl LlmClient {
         mut on_retry: impl FnMut(TranslationRetryInfo),
         mut on_error: impl FnMut(TranslationErrorInfo),
     ) -> Result<TranslationBatchReport, String> {
-        let mut all_translations: Vec<(usize, String)> = Vec::new();
-        let mut current_index = 1; // Legendas geralmente começam em 1
         let total = entries.len();
-        let mut retries = 0;
+        let parallel_requests = settings.parallel_requests.max(1);
+
+        // Divide entries em batches
+        let batches: Vec<Vec<(usize, String)>> = entries
+            .chunks(settings.batch_size)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        let total_batches = batches.len();
+        let mut batch_results: Vec<Option<Vec<(usize, String)>>> = vec![None; total_batches];
+        let mut current_batch_group = 0;
 
         let build_progress = |translations: &Vec<(usize, String)>| -> TranslationProgress {
             let translated_entries = translations.len();
             let last_translated_index = translations
-                .last()
+                .iter()
                 .map(|(idx, _)| *idx)
+                .max()
                 .unwrap_or(0);
             let is_partial = translated_entries < total;
             TranslationProgress {
@@ -422,45 +449,63 @@ impl LlmClient {
             }
         };
 
-        loop {
-            match self
-                .translate_batch(system_prompt, entries, current_index, settings.batch_size)
-                .await
-            {
-                Ok(result) => {
-                    retries = 0; // Reset retries on success
+        // Processa batches em grupos de parallel_requests
+        while current_batch_group * parallel_requests < total_batches {
+            let start_idx = current_batch_group * parallel_requests;
+            let end_idx = (start_idx + parallel_requests).min(total_batches);
 
-                    if result.translations.is_empty() {
-                        break;
+            // Prepara futures para este grupo de batches
+            let mut futures = Vec::new();
+            for batch_idx in start_idx..end_idx {
+                if batch_results[batch_idx].is_none() {
+                    let batch = batches[batch_idx].clone();
+                    futures.push(self.translate_single_batch(system_prompt, batch, batch_idx));
+                }
+            }
+
+            if futures.is_empty() {
+                current_batch_group += 1;
+                continue;
+            }
+
+            // Executa batches em paralelo
+            let results = join_all(futures).await;
+
+            // Processa resultados
+            let mut last_error: Option<String> = None;
+            let mut failed_batches: Vec<usize> = Vec::new();
+
+            for (batch_idx, result) in results {
+                match result {
+                    Ok(translations) => {
+                        batch_results[batch_idx] = Some(translations);
                     }
-
-                    // Adiciona traduções
-                    all_translations.extend(result.translations);
-
-                    // Atualiza progresso
-                    let progress = build_progress(&all_translations);
-                    on_progress(progress.clone());
-
-                    // Verifica se completou
-                    if !progress.is_partial {
-                        break;
-                    }
-
-                    // Continua do próximo índice
-                    if settings.auto_continue {
-                        current_index = progress.last_translated_index + 1;
-                    } else {
-                        break;
+                    Err(e) => {
+                        last_error = Some(e.clone());
+                        failed_batches.push(batch_idx);
                     }
                 }
-                Err(e) => {
-                    retries += 1;
-                    let progress = build_progress(&all_translations);
+            }
 
-                    if retries >= settings.max_retries {
+            // Retry para batches que falharam
+            for failed_idx in failed_batches {
+                let mut retries = 0;
+                loop {
+                    retries += 1;
+
+                    // Calcula progresso atual para callback
+                    let current_translations: Vec<_> = batch_results
+                        .iter()
+                        .filter_map(|r| r.clone())
+                        .flatten()
+                        .collect();
+                    let progress = build_progress(&current_translations);
+
+                    if retries > settings.max_retries {
                         let error_message = format!(
                             "Translation failed after {} retries: {}",
-                            settings.max_retries, e
+                            settings.max_retries,
+                            last_error.clone().unwrap_or_default()
                         );
                         let mut error_progress = progress.clone();
                         error_progress.can_continue =
@@ -471,25 +516,73 @@ impl LlmClient {
                             progress: error_progress.clone(),
                         });
 
-                        return Ok(TranslationBatchReport {
-                            translations: all_translations,
-                            progress: error_progress,
-                            error_message: Some(error_message),
-                        });
+                        if !settings.continue_on_error {
+                            // Coleta traduções bem-sucedidas
+                            let mut translations: Vec<(usize, String)> = batch_results
+                                .iter()
+                                .filter_map(|r| r.clone())
+                                .flatten()
+                                .collect();
+                            translations.sort_by_key(|(idx, _)| *idx);
+
+                            return Ok(TranslationBatchReport {
+                                translations,
+                                progress: error_progress,
+                                error_message: Some(error_message),
+                            });
+                        }
+
+                        // Se continue_on_error, deixa o batch como None e continua
+                        break;
                     }
 
                     on_retry(TranslationRetryInfo {
                         attempt: retries,
                         max_retries: settings.max_retries,
-                        error_message: e,
+                        error_message: last_error.clone().unwrap_or_default(),
                         progress,
                     });
 
-                    // Pequeno delay antes de retry
+                    // Delay antes de retry
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+                    // Tenta novamente
+                    let batch = batches[failed_idx].clone();
+                    match self.translate_subtitles(system_prompt, &batch).await {
+                        Ok(translations) => {
+                            batch_results[failed_idx] = Some(translations);
+                            break;
+                        }
+                        Err(e) => {
+                            last_error = Some(e);
+                        }
+                    }
                 }
             }
+
+            // Atualiza progresso após cada grupo
+            let current_translations: Vec<_> = batch_results
+                .iter()
+                .filter_map(|r| r.clone())
+                .flatten()
+                .collect();
+            let progress = build_progress(&current_translations);
+            on_progress(progress.clone());
+
+            if !settings.auto_continue && progress.is_partial {
+                break;
+            }
+
+            current_batch_group += 1;
         }
+
+        // Coleta e ordena todas as traduções
+        let mut all_translations: Vec<(usize, String)> = batch_results
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect();
+        all_translations.sort_by_key(|(idx, _)| *idx);
 
         let progress = build_progress(&all_translations);
         Ok(TranslationBatchReport {

@@ -20,7 +20,7 @@ export function TranslationSettings() {
     }
   };
 
-  const handleNumberInput = (field: 'batchSize' | 'concurrency' | 'maxRetries', value: string) => {
+  const handleNumberInput = (field: 'batchSize' | 'parallelRequests' | 'concurrency' | 'maxRetries', value: string) => {
     const num = parseInt(value, 10);
     if (!isNaN(num) && num >= 0) {
       updateSetting(field, num);
@@ -69,6 +69,21 @@ export function TranslationSettings() {
           </div>
           <p className="text-xs text-default-500 mt-1">
             Quantidade de linhas enviadas por requisição
+          </p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Requisições Paralelas</label>
+          <Input
+            type="number"
+            value={String(settings.parallelRequests || 1)}
+            onChange={(e) => handleNumberInput('parallelRequests', e.target.value)}
+            className="w-24"
+            min={1}
+            max={10}
+          />
+          <p className="text-xs text-default-500 mt-1">
+            Número de batches enviados em paralelo por arquivo (ex: 4 x 50 linhas = 200 linhas simultâneas)
           </p>
         </div>
 

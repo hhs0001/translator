@@ -99,18 +99,22 @@ export function FileQueueItem({ file, index }: Props) {
         )}
 
         {isProcessing && (
-          <div className="mt-2 h-2 bg-default-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${file.progress}%` }}
-            />
+          <div className="mt-2">
+            <div className="flex items-center justify-between text-xs text-default-500 mb-1">
+              <span>
+                {file.status === 'translating' && file.totalLines > 0
+                  ? `${file.translatedLines}/${file.totalLines} linhas`
+                  : config.label}
+              </span>
+              <span className="font-medium">{Math.round(file.progress)}%</span>
+            </div>
+            <div className="h-2 bg-default-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300 ease-out"
+                style={{ width: `${file.progress}%` }}
+              />
+            </div>
           </div>
-        )}
-
-        {file.status === 'translating' && file.totalLines > 0 && (
-          <p className="text-xs text-default-400 mt-1">
-            {file.translatedLines}/{file.totalLines} linhas
-          </p>
         )}
 
         {file.error && (

@@ -19,6 +19,7 @@ export interface AppSettings {
 
   // Tradução
   batchSize: number;
+  parallelRequests: number;  // Número de requisições paralelas por arquivo
   autoContinue: boolean;
   continueOnError: boolean;
   maxRetries: number;
@@ -47,6 +48,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   prompt: 'Translate the following subtitle lines to Brazilian Portuguese. Keep the same tone and style. Return only the translations, one per line, in the same order.',
   selectedTemplateId: null,
   batchSize: 50,
+  parallelRequests: 1,
   autoContinue: true,
   continueOnError: true,
   maxRetries: 3,
@@ -65,6 +67,8 @@ export interface Template {
   id: string;
   name: string;
   content: string;
+  createdAt?: number;
+  updatedAt?: number;
 }
 
 // ============================================

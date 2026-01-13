@@ -170,6 +170,25 @@ async fn translate_subtitle_batch(
         .await
 }
 
+/// Evento de progresso com identificador de arquivo
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProgressEvent {
+    file_id: String,
+    progress: f64,
+    translated: usize,
+    total: usize,
+}
+
+/// Evento de erro com identificador de arquivo
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ErrorEvent {
+    file_id: String,
+    error: String,
+    retry_count: usize,
+}
+
 /// Traduz arquivo completo com batching e auto-continue
 #[tauri::command]
 async fn translate_subtitle_full(
@@ -178,11 +197,17 @@ async fn translate_subtitle_full(
     system_prompt: String,
     mut file: SubtitleFile,
     settings: TranslationSettings,
+    file_id: String,
 ) -> Result<SubtitleTranslationResult, String> {
     let client = LlmClient::new(config);
 
     // Extrai textos para tradução
     let texts = file.extract_texts();
+    let file_id_progress = file_id.clone();
+    let file_id_retry = file_id.clone();
+    let file_id_error = file_id.clone();
+    let app_progress = app.clone();
+    let app_retry = app.clone();
 
     // Traduz com batching
     let TranslationBatchReport {
@@ -194,14 +219,32 @@ async fn translate_subtitle_full(
             &system_prompt,
             &texts,
             &settings,
-            |progress| {
-                let _ = app.emit("translation:progress", progress.clone());
+            move |prog| {
+                let percent = if prog.total_entries > 0 {
+                    (prog.translated_entries as f64 / prog.total_entries as f64) * 100.0
+                } else {
+                    0.0
+                };
+                let _ = app_progress.emit("translation:progress", ProgressEvent {
+                    file_id: file_id_progress.clone(),
+                    progress: percent,
+                    translated: prog.translated_entries,
+                    total: prog.total_entries,
+                });
             },
-            |retry| {
-                let _ = app.emit("translation:retry", retry.clone());
+            move |retry| {
+                let _ = app_retry.emit("translation:error", ErrorEvent {
+                    file_id: file_id_retry.clone(),
+                    error: retry.error_message.clone(),
+                    retry_count: retry.attempt,
+                });
             },
-            |error| {
-                let _ = app.emit("translation:error", error.clone());
+            move |error| {
+                let _ = app.emit("translation:error", ErrorEvent {
+                    file_id: file_id_error.clone(),
+                    error: error.error_message.clone(),
+                    retry_count: 0,
+                });
             },
         )
         .await?;
@@ -229,33 +272,40 @@ struct DetectedLanguage {
     display_name: String, // Nome para exibição (Portuguese (pt-BR))
 }
 
-/// Detecta o idioma de um texto usando um modelo LLM
+/// Detecta o idioma alvo de tradução baseado no prompt
 #[tauri::command]
 async fn detect_language(
     config: LlmConfig,
-    sample_text: String,
+    translation_prompt: String,
 ) -> Result<DetectedLanguage, String> {
     let client = LlmClient::new(config);
-    
-    let prompt = r#"Analyze the following text and detect its language. 
+
+    let prompt = format!(
+        r#"Given this translation prompt, identify the target language or code-mixed vernacular (e.g., Tenglish, Hinglish, Spanglish).
+
+Translation prompt: [{}]
+
 Respond with ONLY a JSON object in this exact format (no markdown, no extra text):
-{"code": "por", "name": "Portuguese", "displayName": "Portuguese (pt-BR)"}
+{{"code": "por", "name": "Portuguese", "displayName": "Portuguese (pt-BR)"}}
 
 Where:
-- "code" is the ISO 639-2 three-letter code (e.g., "por" for Portuguese, "eng" for English, "spa" for Spanish)
+- "code" is the ISO 639-2 three-letter code (e.g., "por" for Portuguese, "eng" for English, "spa" for Spanish). If an exact code doesn't exist for the vernacular, use the code for the dominant/root language.
 - "name" is the language name in English
-- "displayName" is the language name with regional variant if detectable (e.g., "Portuguese (pt-BR)", "English (en-US)", "Spanish (es-ES)")
+- "displayName" is the language name with regional variant if specified (e.g., "Portuguese (pt-BR)", "English (en-US)", "Spanish (es-MX)")
 
-Text to analyze:
-"#;
-    
-    let full_prompt = format!("{}{}", prompt, sample_text);
-    
-    let response = client.translate(&full_prompt, "").await?;
-    
+Examples:
+- "Translate to Brazilian Portuguese" -> {{"code": "por", "name": "Portuguese", "displayName": "Portuguese (pt-BR)"}}
+- "Translate to English" -> {{"code": "eng", "name": "English", "displayName": "English"}}
+- "Traduzir para português do Brasil" -> {{"code": "por", "name": "Portuguese", "displayName": "Portuguese (pt-BR)"}}
+- "Translate to Spanglish" -> {{"code": "spa", "name": "Spanish", "displayName": "Spanglish"}}"#,
+        translation_prompt
+    );
+
+    let response = client.translate(&prompt, "").await?;
+
     // Tenta extrair JSON da resposta
     let response = response.trim();
-    
+
     // Remove possíveis marcadores de código markdown
     let json_str = if response.starts_with("```") {
         response
@@ -267,7 +317,7 @@ Text to analyze:
     } else {
         response.to_string()
     };
-    
+
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct LangResponse {
@@ -275,10 +325,10 @@ Text to analyze:
         name: String,
         display_name: String,
     }
-    
+
     let lang: LangResponse = serde_json::from_str(&json_str)
         .map_err(|e| format!("Failed to parse language detection response: {}. Response was: {}", e, response))?;
-    
+
     Ok(DetectedLanguage {
         code: lang.code,
         name: lang.name,
@@ -339,22 +389,31 @@ async fn continue_translation(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppSettings {
+    // API
     #[serde(default = "default_base_url")]
     base_url: String,
-    #[serde(default = "default_api_key")]
+    #[serde(default)]
     api_key: String,
     #[serde(default)]
-    headers: Vec<(String, String)>,
-    #[serde(default = "default_model")]
+    headers: Vec<HeaderItem>,
+    #[serde(default)]
     model: String,
     #[serde(default)]
     custom_model: String,
     #[serde(default)]
-    selected_template_id: Option<String>,
+    language_detection_model: String,
+
+    // Prompt
     #[serde(default)]
     prompt: String,
+    #[serde(default)]
+    selected_template_id: Option<String>,
+
+    // Tradução
     #[serde(default = "default_batch_size")]
     batch_size: usize,
+    #[serde(default = "default_parallel_requests")]
+    parallel_requests: usize,
     #[serde(default = "default_auto_continue")]
     auto_continue: bool,
     #[serde(default = "default_continue_on_error")]
@@ -363,50 +422,60 @@ struct AppSettings {
     max_retries: usize,
     #[serde(default = "default_concurrency")]
     concurrency: usize,
+
+    // Saída
     #[serde(default = "default_output_mode")]
     output_mode: String,
+    #[serde(default = "default_mux_language")]
+    mux_language: String,
+    #[serde(default = "default_mux_title")]
+    mux_title: String,
     #[serde(default)]
-    mux_language: Option<String>,
-    #[serde(default)]
-    mux_title: Option<String>,
+    separate_output_dir: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct HeaderItem {
+    id: String,
+    key: String,
+    value: String,
 }
 
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
             base_url: default_base_url(),
-            api_key: default_api_key(),
+            api_key: String::new(),
             headers: Vec::new(),
-            model: default_model(),
+            model: String::new(),
             custom_model: String::new(),
-            selected_template_id: None,
+            language_detection_model: String::new(),
             prompt: String::new(),
+            selected_template_id: None,
             batch_size: default_batch_size(),
+            parallel_requests: default_parallel_requests(),
             auto_continue: default_auto_continue(),
             continue_on_error: default_continue_on_error(),
             max_retries: default_max_retries(),
             concurrency: default_concurrency(),
             output_mode: default_output_mode(),
-            mux_language: None,
-            mux_title: None,
+            mux_language: default_mux_language(),
+            mux_title: default_mux_title(),
+            separate_output_dir: String::new(),
         }
     }
 }
 
 fn default_base_url() -> String {
-    "http://localhost:8317/v1".to_string()
-}
-
-fn default_api_key() -> String {
-    "dummy".to_string()
-}
-
-fn default_model() -> String {
-    "gemini-2.5-pro".to_string()
+    "http://localhost:8045/v1".to_string()
 }
 
 fn default_batch_size() -> usize {
     50
+}
+
+fn default_parallel_requests() -> usize {
+    1
 }
 
 fn default_auto_continue() -> bool {
@@ -414,7 +483,7 @@ fn default_auto_continue() -> bool {
 }
 
 fn default_continue_on_error() -> bool {
-    false
+    true
 }
 
 fn default_max_retries() -> usize {
@@ -427,6 +496,14 @@ fn default_concurrency() -> usize {
 
 fn default_output_mode() -> String {
     "separate".to_string()
+}
+
+fn default_mux_language() -> String {
+    "por".to_string()
+}
+
+fn default_mux_title() -> String {
+    "Portuguese".to_string()
 }
 
 fn get_settings_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -474,11 +551,14 @@ async fn save_settings(app: tauri::AppHandle, settings: AppSettings) -> Result<(
 
 /// Prompt template structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct PromptTemplate {
     id: String,
     name: String,
     content: String,
+    #[serde(default)]
     created_at: u64,
+    #[serde(default)]
     updated_at: u64,
 }
 

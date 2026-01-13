@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:v3.heroui.com)"
+      "WebFetch(domain:v3.heroui.com)",
+      "Bash(cargo check:*)",
+      "Bash(bun tsc:*)",
+      "Bash(bun run build)",
+      "Bash(bun run tsc:*)",
+      "Bash(tree:*)"
     ]
   }
 }

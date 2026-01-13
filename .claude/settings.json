@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "bun run build",
-      "Bash(bun run build)"
-    ]
-  }
-}

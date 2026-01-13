@@ -67,14 +67,23 @@ export async function muxSubtitleToVideo(
   return invoke('mux_subtitle_to_video', { videoPath, subtitlePath, outputPath, language, title });
 }
 
+export interface TranslationOptions {
+  batchSize: number;
+  parallelRequests: number;
+  autoContinue: boolean;
+  continueOnError: boolean;
+  maxRetries: number;
+}
+
 export async function translateSubtitleFull(
   subtitle: SubtitleFile,
   prompt: string,
   baseUrl: string,
   apiKey: string,
   model: string,
-  batchSize: number,
-  headers: Record<string, string>
+  headers: Record<string, string>,
+  fileId: string,
+  options: TranslationOptions
 ): Promise<SubtitleTranslationResult> {
   return invoke<SubtitleTranslationResult>('translate_subtitle_full', {
     config: {
@@ -86,11 +95,13 @@ export async function translateSubtitleFull(
     systemPrompt: prompt,
     file: subtitle,
     settings: {
-      batchSize: batchSize,
-      autoContinue: true,
-      continueOnError: true,
-      maxRetries: 3,
+      batchSize: options.batchSize,
+      parallelRequests: options.parallelRequests,
+      autoContinue: options.autoContinue,
+      continueOnError: options.continueOnError,
+      maxRetries: options.maxRetries,
     },
+    fileId,
   });
 }
 
@@ -110,7 +121,7 @@ export async function detectLanguage(
   baseUrl: string,
   apiKey: string,
   model: string,
-  sampleText: string,
+  translationPrompt: string,
   headers: Record<string, string> = {}
 ): Promise<DetectedLanguage> {
   return invoke<DetectedLanguage>('detect_language', {
@@ -120,6 +131,6 @@ export async function detectLanguage(
       headers: Object.entries(headers).map(([k, v]) => [k, v]),
       model,
     },
-    sampleText,
+    translationPrompt,
   });
 }

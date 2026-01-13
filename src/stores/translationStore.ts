@@ -203,6 +203,32 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         totalLines: subtitle.entries.length,
       });
 
+      // Detectar idioma alvo antes de traduzir (se modelo de detecção configurado)
+      let muxLanguage = settings.muxLanguage;
+      let muxTitle = settings.muxTitle;
+
+      if (settings.languageDetectionModel) {
+        setFileStatus(file.id, 'detecting_language');
+        logs.addLog('info', `Detectando idioma alvo do prompt...`, file.name);
+
+        try {
+          const detected = await TauriUtils.detectLanguage(
+            settings.baseUrl,
+            settings.apiKey,
+            settings.languageDetectionModel,
+            settings.prompt,
+            headersObj
+          );
+
+          updateFile(file.id, { detectedLanguage: detected });
+          muxLanguage = detected.code;
+          muxTitle = detected.displayName;
+          logs.addLog('info', `Idioma alvo detectado: ${detected.displayName}`, file.name);
+        } catch (langError) {
+          logs.addLog('warning', `Não foi possível detectar idioma: ${langError}. Usando configuração padrão.`, file.name);
+        }
+      }
+
       setFileStatus(file.id, 'translating');
       logs.addLog('info', `Traduzindo ${file.name} (${subtitle.entries.length} linhas)...`, file.name);
 
@@ -213,8 +239,15 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         settings.baseUrl,
         settings.apiKey,
         model,
-        settings.batchSize,
-        headersObj
+        headersObj,
+        file.id,
+        {
+          batchSize: settings.batchSize,
+          parallelRequests: settings.parallelRequests,
+          autoContinue: settings.autoContinue,
+          continueOnError: settings.continueOnError,
+          maxRetries: settings.maxRetries,
+        }
       );
 
       updateFile(file.id, {
@@ -225,38 +258,6 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
 
       if (result.progress.isPartial && settings.autoContinue) {
         logs.addLog('warning', `Tradução parcial, continuando...`, file.name);
-      }
-
-      // Detectar idioma se um modelo de detecção estiver configurado
-      let muxLanguage = settings.muxLanguage;
-      let muxTitle = settings.muxTitle;
-      
-      if (settings.languageDetectionModel) {
-        setFileStatus(file.id, 'detecting_language');
-        logs.addLog('info', `Detectando idioma de ${file.name}...`, file.name);
-        
-        try {
-          // Pega uma amostra das primeiras 5 linhas traduzidas para detectar o idioma
-          const sampleText = result.file.entries
-            .slice(0, 5)
-            .map(e => e.text)
-            .join('\n');
-          
-          const detected = await TauriUtils.detectLanguage(
-            settings.baseUrl,
-            settings.apiKey,
-            settings.languageDetectionModel,
-            sampleText,
-            headersObj
-          );
-          
-          updateFile(file.id, { detectedLanguage: detected });
-          muxLanguage = detected.code;
-          muxTitle = detected.displayName;
-          logs.addLog('info', `Idioma detectado: ${detected.displayName}`, file.name);
-        } catch (langError) {
-          logs.addLog('warning', `Não foi possível detectar idioma: ${langError}. Usando configuração padrão.`, file.name);
-        }
       }
 
       // Salvar arquivo de legenda traduzido
@@ -316,20 +317,22 @@ export function useTranslationEvents() {
 
     const setupListeners = async () => {
       try {
-        unlistenProgress = await listen<{ file_id: string; progress: number; translated: number; total: number }>(
+        unlistenProgress = await listen<{ fileId: string; progress: number; translated: number; total: number }>(
           'translation:progress',
           (event) => {
-            const { progress, translated, total } = event.payload;
+            const { fileId, progress, translated, total } = event.payload;
             const store = useTranslationStore.getState();
-            store.updateFile(event.payload.file_id, { progress, translatedLines: translated, totalLines: total });
+            store.updateFile(fileId, { progress, translatedLines: translated, totalLines: total });
           }
         );
 
-        unlistenError = await listen<{ file_id: string; error: string; retry_count: number }>(
+        unlistenError = await listen<{ fileId: string; error: string; retryCount: number }>(
           'translation:error',
           (event) => {
-            const { error, retry_count } = event.payload;
-            useLogsStore.getState().addLog('warning', `Erro (tentativa ${retry_count}): ${error}`);
+            const { fileId, error, retryCount } = event.payload;
+            const file = useTranslationStore.getState().queue.find(f => f.id === fileId);
+            const fileName = file?.name || 'arquivo';
+            useLogsStore.getState().addLog('warning', `Erro em ${fileName} (tentativa ${retryCount}): ${error}`, fileName);
           }
         );
       } catch (error) {
