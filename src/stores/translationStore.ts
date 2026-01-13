@@ -215,6 +215,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
           const detected = await TauriUtils.detectLanguage(
             settings.baseUrl,
             settings.apiKey,
+            settings.apiFormat,
             settings.languageDetectionModel,
             settings.prompt,
             headersObj
@@ -238,6 +239,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         settings.prompt,
         settings.baseUrl,
         settings.apiKey,
+        settings.apiFormat,
         model,
         headersObj,
         file.id,
