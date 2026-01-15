@@ -100,6 +100,21 @@ fn default_parallel_requests() -> usize {
     1
 }
 
+fn strip_think_blocks(input: &str) -> String {
+    let mut output = input.to_string();
+    loop {
+        let Some(start) = output.find("<think>") else {
+            break;
+        };
+        let Some(end) = output[start + 7..].find("</think>") else {
+            break;
+        };
+        let end = start + 7 + end + 8;
+        output.replace_range(start..end, "");
+    }
+    output
+}
+
 
 impl Default for TranslationSettings {
     fn default() -> Self {
@@ -469,12 +484,13 @@ impl LlmClient {
         );
 
         let response = self.translate(&instruction, &formatted).await?;
+        let cleaned_response = strip_think_blocks(&response);
 
         // Parse da resposta
         let mut results = Vec::new();
-        for line in response.lines() {
+        for line in cleaned_response.lines() {
             let line = line.trim();
-            if line.is_empty() {
+            if line.is_empty() || line.starts_with("```") {
                 continue;
             }
 
