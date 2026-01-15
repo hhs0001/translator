@@ -303,19 +303,42 @@ Examples:
 
     let response = client.translate(&prompt, "").await?;
 
+    fn strip_think_blocks(input: &str) -> String {
+        let mut output = input.to_string();
+        loop {
+            let Some(start) = output.find("<think>") else {
+                break;
+            };
+            let Some(end) = output[start + 7..].find("</think>") else {
+                break;
+            };
+            let end = start + 7 + end + 8;
+            output.replace_range(start..end, "");
+        }
+        output
+    }
+
     // Tenta extrair JSON da resposta
     let response = response.trim();
+    let cleaned = strip_think_blocks(response);
 
     // Remove possíveis marcadores de código markdown
-    let json_str = if response.starts_with("```") {
-        response
+    let json_str = if cleaned.trim_start().starts_with("```") {
+        cleaned
             .lines()
             .skip(1)
             .take_while(|l| !l.starts_with("```"))
             .collect::<Vec<_>>()
             .join("\n")
     } else {
-        response.to_string()
+        cleaned.to_string()
+    };
+
+    let json_str = json_str.trim();
+    let json_str = if let (Some(start), Some(end)) = (json_str.find('{'), json_str.rfind('}')) {
+        json_str[start..=end].to_string()
+    } else {
+        json_str.to_string()
     };
 
     #[derive(Deserialize)]

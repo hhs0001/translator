@@ -129,7 +129,7 @@ export function ApiSettings() {
             value={modelSearch}
             onChange={(e) => setModelSearch(e.target.value)}
             className="w-full mb-2"
-            isDisabled={isLoading || models.length === 0}
+            disabled={isLoading || models.length === 0}
           />
           <div className="flex gap-2">
             <Select
