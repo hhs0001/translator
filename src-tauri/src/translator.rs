@@ -241,8 +241,6 @@ struct AnthropicResponse {
 
 #[derive(Debug, Deserialize)]
 struct AnthropicContent {
-    #[serde(rename = "type")]
-    content_type: String,
     text: String,
 }
 
@@ -261,11 +259,6 @@ impl LlmClient {
             client: Client::new(),
             config,
         }
-    }
-
-    /// Retorna o formato de API em uso
-    pub fn get_api_format(&self) -> &ApiFormat {
-        &self.config.api_format
     }
 
     fn apply_headers(&self, builder: RequestBuilder) -> RequestBuilder {
