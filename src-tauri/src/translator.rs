@@ -1,6 +1,7 @@
 use futures::future::join_all;
 use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Formato da API LLM
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -276,6 +277,71 @@ impl LlmClient {
         }
     }
 
+    fn extract_ass_tags(text: &str) -> Vec<String> {
+        let mut tags = Vec::new();
+        let mut rest = text;
+        while let Some(start) = rest.find("{\\") {
+            let after_start = &rest[start + 1..];
+            if let Some(end) = after_start.find('}') {
+                let tag_block = &after_start[..end];
+                tags.push(format!("{{{}}}", tag_block));
+                rest = &after_start[end + 1..];
+            } else {
+                break;
+            }
+        }
+        tags
+    }
+
+    fn normalize_ass_tag(tag: &str) -> String {
+        let mut normalized = String::new();
+        let mut chars = tag.chars().peekable();
+        while let Some(ch) = chars.next() {
+            normalized.push(ch.to_ascii_lowercase());
+            if ch == '\\' {
+                while let Some(&next_ch) = chars.peek() {
+                    if next_ch.is_ascii_digit() || next_ch == '.' || next_ch == '-' {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        normalized
+    }
+
+    fn tags_compatible(original: &str, translated: &str) -> bool {
+        let original_tags = Self::extract_ass_tags(original);
+        let translated_tags = Self::extract_ass_tags(translated);
+
+        if original_tags.is_empty() && translated_tags.is_empty() {
+            return true;
+        }
+
+        if original_tags.is_empty() || translated_tags.is_empty() {
+            return false;
+        }
+
+        let mut counts = HashMap::new();
+        for tag in original_tags {
+            let normalized = Self::normalize_ass_tag(&tag);
+            *counts.entry(normalized).or_insert(0usize) += 1;
+        }
+
+        for tag in translated_tags {
+            let normalized = Self::normalize_ass_tag(&tag);
+            match counts.get_mut(&normalized) {
+                Some(count) if *count > 0 => {
+                    *count -= 1;
+                }
+                _ => return false,
+            }
+        }
+
+        counts.values().all(|count| *count == 0)
+    }
+
     fn apply_headers(&self, builder: RequestBuilder) -> RequestBuilder {
         let mut builder = builder;
 
@@ -470,45 +536,120 @@ impl LlmClient {
         system_prompt: &str,
         entries: &[(usize, String)],
     ) -> Result<Vec<(usize, String)>, String> {
+        // Placeholder para quebras de linha - único o suficiente para não aparecer em texto normal
+        const NEWLINE_PLACEHOLDER: &str = "<<NEWLINE>>";
+        
         // Formata as legendas para envio
         // Formato: INDEX|TEXTO (para preservar mapeamento)
+        // Converte \N (ASS) e \n (real) para placeholder para evitar confusão com quebras de linha reais
         let formatted: String = entries
             .iter()
-            .map(|(idx, text)| format!("{}|{}", idx, text.replace('\n', "\\N")))
+            .map(|(idx, text)| {
+                let normalized = text
+                    .replace("\\N", NEWLINE_PLACEHOLDER)
+                    .replace("\\n", NEWLINE_PLACEHOLDER)
+                    .replace('\n', NEWLINE_PLACEHOLDER);
+                format!("{}|{}", idx, normalized)
+            })
             .collect::<Vec<_>>()
             .join("\n");
 
         let instruction = format!(
-            "{}\n\n---\nIMPORTANT: Return the translations in EXACTLY the same format: INDEX|TRANSLATED_TEXT\nEach line should be: number|translated text\nPreserve \\N as line breaks within subtitles.",
-            system_prompt
+            r#"{}
+
+---
+CRITICAL FORMAT INSTRUCTIONS:
+1. Return translations in EXACTLY this format: INDEX|TRANSLATED_TEXT
+2. Each subtitle must be on its own line: number|translated text
+3. The marker {} represents a LINE BREAK within a subtitle. You MUST preserve it exactly as-is in your translation.
+   Example input:  5|It's a special event{}that everyone attends
+   Example output: 5|É um evento especial{}que todos participam
+4. Do NOT remove, split, or modify {} markers - they indicate where line breaks occur in the subtitle display."#,
+            system_prompt, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER
         );
 
         let response = self.translate(&instruction, &formatted).await?;
         let cleaned_response = strip_think_blocks(&response);
 
-        // Parse da resposta
+        // Parse da resposta (suporta quebras de linha reais no texto traduzido)
         let mut results = Vec::new();
-        for line in cleaned_response.lines() {
-            let line = line.trim();
+        let mut current_idx: Option<usize> = None;
+        let mut current_text = String::new();
+
+        for raw_line in cleaned_response.lines() {
+            let line = raw_line.trim_end();
             if line.is_empty() || line.starts_with("```") {
                 continue;
             }
 
-            // Tenta encontrar o separador |
             if let Some(sep_pos) = line.find('|') {
                 let idx_str = &line[..sep_pos];
-                let text = &line[sep_pos + 1..];
-
                 if let Ok(idx) = idx_str.trim().parse::<usize>() {
-                    // Converte \N de volta para quebras de linha
-                    let text = text.replace("\\N", "\n").replace("\\n", "\n");
-                    results.push((idx, text));
+                    if let Some(prev_idx) = current_idx.take() {
+                        // Converte placeholder de volta para \n (newline real)
+                        // Também suporta caso o LLM tenha usado \N ou \n diretamente
+                        let text = current_text
+                            .replace(NEWLINE_PLACEHOLDER, "\n")
+                            .replace("\\N", "\n")
+                            .replace("\\n", "\n");
+                        results.push((prev_idx, text));
+                    }
+                    current_idx = Some(idx);
+                    current_text = line[sep_pos + 1..].to_string();
+                    continue;
                 }
             }
+
+            if current_idx.is_some() {
+                if !current_text.is_empty() {
+                    current_text.push('\n');
+                }
+                current_text.push_str(line);
+            }
+        }
+
+        if let Some(prev_idx) = current_idx.take() {
+            // Converte placeholder de volta para \n (newline real)
+            // Também suporta caso o LLM tenha usado \N ou \n diretamente
+            let text = current_text
+                .replace(NEWLINE_PLACEHOLDER, "\n")
+                .replace("\\N", "\n")
+                .replace("\\n", "\n");
+            results.push((prev_idx, text));
         }
 
         if results.is_empty() {
             return Err("Failed to parse translation response".to_string());
+        }
+
+        let mut tag_warns = Vec::new();
+        for (idx, text) in &results {
+            let original_text = entries
+                .iter()
+                .find(|(entry_idx, _)| entry_idx == idx)
+                .map(|(_, entry_text)| entry_text.as_str())
+                .unwrap_or("");
+            if !Self::tags_compatible(original_text, text) {
+                tag_warns.push((*idx, original_text.to_string(), text.clone()));
+            }
+        }
+
+        if !tag_warns.is_empty() {
+            let sample = tag_warns
+                .into_iter()
+                .take(3)
+                .map(|(idx, original, translated)| {
+                    format!(
+                        "#{}\nORIGINAL: {}\nTRADUZIDO: {}",
+                        idx, original, translated
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            return Err(format!(
+                "Translated lines contain incompatible ASS tags. Sample:\n{}",
+                sample
+            ));
         }
 
         Ok(results)

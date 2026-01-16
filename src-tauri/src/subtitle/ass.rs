@@ -217,6 +217,9 @@ pub fn serialize(file: &SubtitleFile) -> String {
             .map(|s| s.as_str())
             .unwrap_or("");
 
+        // Converte \n (newline real) para \N (formato ASS)
+        let text_for_ass = entry.text.replace('\n', "\\N");
+        
         output.push_str(&format!(
             "Dialogue: {},{},{},{},{},{:04},{:04},{:04},{},{}\n",
             layer,
@@ -228,7 +231,7 @@ pub fn serialize(file: &SubtitleFile) -> String {
             margin_r,
             margin_v,
             effect,
-            entry.text
+            text_for_ass
         ));
     }
 
