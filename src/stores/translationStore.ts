@@ -18,6 +18,7 @@ interface TranslationState {
   reorderQueue: (fromIndex: number, toIndex: number) => void;
 
   updateFile: (id: string, updates: Partial<QueueFile>) => void;
+  bulkUpdateFiles: (updates: Record<string, Partial<QueueFile>>) => void;
   setFileStatus: (id: string, status: FileStatus, error?: string) => void;
   setSelectedTrack: (id: string, trackIndex: number) => void;
   setAllVideoTracks: (trackIndex: number) => void;
@@ -30,6 +31,13 @@ interface TranslationState {
 
   processNextFile: () => Promise<void>;
   translateFile: (file: QueueFile) => Promise<void>;
+}
+
+function hasFileChanges(file: QueueFile, updates: Partial<QueueFile>) {
+  for (const [key, value] of Object.entries(updates) as [keyof QueueFile, QueueFile[keyof QueueFile]][]) {
+    if (file[key] !== value) return true;
+  }
+  return false;
 }
 
 export const useTranslationStore = create<TranslationState>((set, get) => ({
@@ -77,33 +85,53 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
   },
 
   updateFile: (id, updates) => {
-    set((state) => ({
-      queue: state.queue.map((f) => (f.id === id ? { ...f, ...updates } : f)),
-    }));
+    if (Object.keys(updates).length === 0) return;
+    set((state) => {
+      let changed = false;
+      const newQueue = state.queue.map((f) => {
+        if (f.id !== id) return f;
+        if (!hasFileChanges(f, updates)) return f;
+        changed = true;
+        return { ...f, ...updates };
+      });
+      return changed ? { queue: newQueue } : state;
+    });
+  },
+
+  bulkUpdateFiles: (updates) => {
+    const ids = Object.keys(updates);
+    if (ids.length === 0) return;
+    set((state) => {
+      let changed = false;
+      const newQueue = state.queue.map((f) => {
+        const fileUpdates = updates[f.id];
+        if (!fileUpdates || Object.keys(fileUpdates).length === 0) return f;
+        if (!hasFileChanges(f, fileUpdates)) return f;
+        changed = true;
+        return { ...f, ...fileUpdates };
+      });
+      return changed ? { queue: newQueue } : state;
+    });
   },
 
   setFileStatus: (id, status, error) => {
-    set((state) => ({
-      queue: state.queue.map((f) =>
-        f.id === id ? { ...f, status, error } : f
-      ),
-    }));
+    get().updateFile(id, { status, error });
   },
 
   setSelectedTrack: (id, trackIndex) => {
-    set((state) => ({
-      queue: state.queue.map((f) =>
-        f.id === id ? { ...f, selectedTrackIndex: trackIndex } : f
-      ),
-    }));
+    get().updateFile(id, { selectedTrackIndex: trackIndex });
   },
 
   setAllVideoTracks: (trackIndex) => {
-    set((state) => ({
-      queue: state.queue.map((f) =>
-        f.type === 'video' ? { ...f, selectedTrackIndex: trackIndex } : f
-      ),
-    }));
+    const updates: Record<string, Partial<QueueFile>> = {};
+    for (const file of get().queue) {
+      if (file.type === 'video' && file.selectedTrackIndex !== trackIndex) {
+        updates[file.id] = { selectedTrackIndex: trackIndex };
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      get().bulkUpdateFiles(updates);
+    }
     useLogsStore.getState().addLog('info', `Faixa ${trackIndex + 1} selecionada para todos os vídeos`);
   },
 
@@ -316,6 +344,28 @@ export function useTranslationEvents() {
   useEffect(() => {
     let unlistenProgress: (() => void) | null = null;
     let unlistenError: (() => void) | null = null;
+    const pendingProgress = new Map<string, { progress: number; translated: number; total: number }>();
+    let flushTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const flushProgress = () => {
+      flushTimeout = null;
+      if (pendingProgress.size === 0) return;
+      const updates: Record<string, Partial<QueueFile>> = {};
+      for (const [fileId, payload] of pendingProgress.entries()) {
+        updates[fileId] = {
+          progress: payload.progress,
+          translatedLines: payload.translated,
+          totalLines: payload.total,
+        };
+      }
+      pendingProgress.clear();
+      useTranslationStore.getState().bulkUpdateFiles(updates);
+    };
+
+    const scheduleFlush = () => {
+      if (flushTimeout !== null) return;
+      flushTimeout = setTimeout(flushProgress, 100);
+    };
 
     const setupListeners = async () => {
       try {
@@ -323,8 +373,8 @@ export function useTranslationEvents() {
           'translation:progress',
           (event) => {
             const { fileId, progress, translated, total } = event.payload;
-            const store = useTranslationStore.getState();
-            store.updateFile(fileId, { progress, translatedLines: translated, totalLines: total });
+            pendingProgress.set(fileId, { progress, translated, total });
+            scheduleFlush();
           }
         );
 
@@ -345,6 +395,9 @@ export function useTranslationEvents() {
     setupListeners();
 
     return () => {
+      if (flushTimeout !== null) {
+        clearTimeout(flushTimeout);
+      }
       unlistenProgress?.();
       unlistenError?.();
     };

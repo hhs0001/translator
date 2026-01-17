@@ -194,6 +194,7 @@ export type LogLevel = 'info' | 'warning' | 'error' | 'success';
 export interface LogEntry {
   id: string;
   timestamp: Date;
+  timestampLabel: string;
   level: LogLevel;
   message: string;
   file?: string;

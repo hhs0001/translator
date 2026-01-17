@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslationStore } from '../../stores/translationStore';
 import { useLogsStore } from '../../stores/logsStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useShallow } from 'zustand/shallow';
 
 interface Props {
   activeTab: string;
@@ -11,13 +12,42 @@ interface Props {
 }
 
 export function Navbar({ activeTab, onTabChange }: Props) {
-  const { isTranslating, isPaused, startTranslation, pauseTranslation, resumeTranslation, queue } = useTranslationStore();
-  const { toggleDrawer, logs } = useLogsStore();
-  const { ffmpegInstalled } = useSettingsStore();
+  const {
+    isTranslating,
+    isPaused,
+    startTranslation,
+    pauseTranslation,
+    resumeTranslation,
+    queueLength,
+    pendingCount,
+    isProcessing,
+  } = useTranslationStore(useShallow((s) => {
+    let pending = 0;
+    let processing = false;
+    for (const file of s.queue) {
+      if (file.status === 'pending') pending += 1;
+      if (file.status === 'translating' || file.status === 'extracting') {
+        processing = true;
+      }
+    }
+    return {
+      isTranslating: s.isTranslating,
+      isPaused: s.isPaused,
+      startTranslation: s.startTranslation,
+      pauseTranslation: s.pauseTranslation,
+      resumeTranslation: s.resumeTranslation,
+      queueLength: s.queue.length,
+      pendingCount: pending,
+      isProcessing: processing,
+    };
+  }));
 
-  const pendingCount = queue.filter((f) => f.status === 'pending').length;
-  const errorCount = logs.filter((l) => l.level === 'error').length;
-  const isProcessing = queue.some(f => f.status === 'translating' || f.status === 'extracting');
+  const { toggleDrawer, errorCount } = useLogsStore(useShallow((s) => ({
+    toggleDrawer: s.toggleDrawer,
+    errorCount: s.errorCount,
+  })));
+
+  const ffmpegInstalled = useSettingsStore((s) => s.ffmpegInstalled);
 
   const handleTranslateClick = () => {
     if (isProcessing) {
@@ -78,7 +108,7 @@ export function Navbar({ activeTab, onTabChange }: Props) {
           <Button
             variant={isProcessing && !isPaused ? 'secondary' : 'default'}
             onClick={handleTranslateClick}
-            disabled={queue.length === 0 && !isTranslating}
+            disabled={queueLength === 0 && !isTranslating}
           >
             {getTranslateButtonText()}
           </Button>

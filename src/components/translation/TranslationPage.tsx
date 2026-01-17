@@ -3,9 +3,12 @@ import { FileDropZone } from './FileDropZone';
 import { FileQueue } from './FileQueue';
 import { SubtitleEditor } from './SubtitleEditor';
 import { useTranslationStore } from '../../stores/translationStore';
+import { useShallow } from 'zustand/shallow';
 
 export function TranslationPage() {
-  const { queue, currentFileId } = useTranslationStore();
+  const { queue, currentFileId } = useTranslationStore(
+    useShallow((s) => ({ queue: s.queue, currentFileId: s.currentFileId }))
+  );
   const currentFile = queue.find((f) => f.id === currentFileId);
 
   return (

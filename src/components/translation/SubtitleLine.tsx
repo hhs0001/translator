@@ -1,3 +1,4 @@
+import { memo, type ChangeEvent } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { SubtitleEntry } from '../../types';
 
@@ -5,10 +6,10 @@ interface Props {
   index: number;
   original: SubtitleEntry;
   translated?: SubtitleEntry;
-  onTranslationChange: (text: string) => void;
+  onTranslationChange: (index: number, text: string) => void;
 }
 
-export function SubtitleLine({ index, original, translated, onTranslationChange }: Props) {
+export const SubtitleLine = memo(function SubtitleLine({ index, original, translated, onTranslationChange }: Props) {
   const isTranslated = !!translated;
 
   return (
@@ -32,7 +33,7 @@ export function SubtitleLine({ index, original, translated, onTranslationChange 
         <Textarea
           aria-label={`Tradução linha ${index + 1}`}
           value={translated?.text || ''}
-          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onTranslationChange(e.target.value)}
+          onChange={(e: ChangeEvent<HTMLTextAreaElement>) => onTranslationChange(index, e.target.value)}
           placeholder={isTranslated ? '' : 'Aguardando tradução...'}
           className="w-full text-sm h-16"
           disabled={!isTranslated}
@@ -40,4 +41,4 @@ export function SubtitleLine({ index, original, translated, onTranslationChange 
       </div>
     </div>
   );
-}
+});

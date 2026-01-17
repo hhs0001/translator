@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -31,8 +32,9 @@ function getTrackLabel(track: { index: number; codec: string; language?: string;
   return parts.join(' ');
 }
 
-export function FileQueueItem({ file, index }: Props) {
-  const { removeFile, setSelectedTrack } = useTranslationStore();
+export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props) {
+  const removeFile = useTranslationStore((s) => s.removeFile);
+  const setSelectedTrack = useTranslationStore((s) => s.setSelectedTrack);
   const config = STATUS_CONFIG[file.status];
 
   const isProcessing = ['extracting', 'translating', 'detecting_language', 'saving', 'muxing'].includes(file.status);
@@ -138,4 +140,4 @@ export function FileQueueItem({ file, index }: Props) {
       </Button>
     </div>
   );
-}
+});

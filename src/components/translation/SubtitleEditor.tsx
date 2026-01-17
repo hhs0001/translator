@@ -2,30 +2,38 @@ import { Card } from '@/components/ui/card';
 import { QueueFile } from '../../types';
 import { SubtitleLine } from './SubtitleLine';
 import { useTranslationStore } from '../../stores/translationStore';
-import { useRef, useEffect } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
 interface Props {
   file: QueueFile;
 }
 
-export function SubtitleEditor({ file }: Props) {
-  const { updateFile } = useTranslationStore();
+function SubtitleEditorBase({ file }: Props) {
+  const updateFile = useTranslationStore((s) => s.updateFile);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const entries = file.originalSubtitle?.entries || [];
   const translated = file.translatedEntries || [];
+  const translatedRef = useRef(translated);
 
-  const progress = entries.length > 0
-    ? Math.round((translated.length / entries.length) * 100)
-    : 0;
+  useEffect(() => {
+    translatedRef.current = translated;
+  }, [translated]);
 
-  const handleTranslationChange = (index: number, newText: string) => {
-    const newTranslated = [...translated];
-    if (newTranslated[index]) {
-      newTranslated[index] = { ...newTranslated[index], text: newText };
-      updateFile(file.id, { translatedEntries: newTranslated });
-    }
-  };
+  const progress = useMemo(() => (
+    entries.length > 0
+      ? Math.round((translated.length / entries.length) * 100)
+      : 0
+  ), [entries.length, translated.length]);
+
+  const handleTranslationChange = useCallback((index: number, newText: string) => {
+    const current = translatedRef.current;
+    const existing = current[index];
+    if (!existing) return;
+    const newTranslated = [...current];
+    newTranslated[index] = { ...existing, text: newText };
+    updateFile(file.id, { translatedEntries: newTranslated });
+  }, [file.id, updateFile]);
 
   // Auto-scroll to current translation
   useEffect(() => {
@@ -67,10 +75,17 @@ export function SubtitleEditor({ file }: Props) {
             index={index}
             original={entry}
             translated={translated[index]}
-            onTranslationChange={(text) => handleTranslationChange(index, text)}
+            onTranslationChange={handleTranslationChange}
           />
         ))}
       </div>
     </Card>
   );
 }
+
+export const SubtitleEditor = memo(SubtitleEditorBase, (prev, next) => (
+  prev.file.id === next.file.id &&
+  prev.file.name === next.file.name &&
+  prev.file.originalSubtitle === next.file.originalSubtitle &&
+  prev.file.translatedEntries === next.file.translatedEntries
+));

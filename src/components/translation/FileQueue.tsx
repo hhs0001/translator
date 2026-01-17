@@ -4,24 +4,47 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileQueueItem } from './FileQueueItem';
 import { useTranslationStore } from '../../stores/translationStore';
+import { useShallow } from 'zustand/shallow';
+import { useMemo } from 'react';
 
 interface Props {
   maxVisible?: number;
 }
 
 export function FileQueue({ maxVisible }: Props) {
-  const { queue, clearQueue, setAllVideoTracks } = useTranslationStore();
+  const { queue, clearQueue, setAllVideoTracks } = useTranslationStore(
+    useShallow((s) => ({
+      queue: s.queue,
+      clearQueue: s.clearQueue,
+      setAllVideoTracks: s.setAllVideoTracks,
+    }))
+  );
 
-  const visibleQueue = maxVisible ? queue.slice(0, maxVisible) : queue;
-  const hiddenCount = maxVisible ? Math.max(0, queue.length - maxVisible) : 0;
+  const visibleQueue = useMemo(
+    () => (maxVisible ? queue.slice(0, maxVisible) : queue),
+    [queue, maxVisible]
+  );
+  const hiddenCount = useMemo(
+    () => (maxVisible ? Math.max(0, queue.length - maxVisible) : 0),
+    [queue.length, maxVisible]
+  );
 
   // Encontrar vídeos com faixas disponíveis
-  const videosWithTracks = queue.filter(f => f.type === 'video' && f.subtitleTracks && f.subtitleTracks.length > 0);
+  const videosWithTracks = useMemo(
+    () => queue.filter((f) => f.type === 'video' && f.subtitleTracks && f.subtitleTracks.length > 0),
+    [queue]
+  );
   const hasMultipleVideos = videosWithTracks.length > 1;
   
   // Pegar o máximo de faixas disponíveis entre todos os vídeos
-  const maxTracks = Math.max(...videosWithTracks.map(f => f.subtitleTracks?.length ?? 0), 0);
-  const trackOptions = Array.from({ length: maxTracks }, (_, i) => i);
+  const maxTracks = useMemo(
+    () => Math.max(...videosWithTracks.map((f) => f.subtitleTracks?.length ?? 0), 0),
+    [videosWithTracks]
+  );
+  const trackOptions = useMemo(
+    () => Array.from({ length: maxTracks }, (_, i) => i),
+    [maxTracks]
+  );
 
   const handleQuickSelect = (value: string) => {
     if (value !== '') {
