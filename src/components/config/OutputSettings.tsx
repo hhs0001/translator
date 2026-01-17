@@ -1,4 +1,8 @@
-import { Card, Input, Select, Label, ListBox, Button } from '@heroui/react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export function OutputSettings() {
@@ -27,25 +31,17 @@ export function OutputSettings() {
         <div>
           <label className="block text-sm font-medium mb-1">Modo de Saída</label>
           <Select
-            aria-label="Modo de saída"
-            selectedKey={settings.outputMode}
-            onSelectionChange={(key) => updateSetting('outputMode', key as 'mux' | 'separate')}
-            placeholder="Selecione o modo"
+            value={settings.outputMode}
+            onValueChange={(value) => updateSetting('outputMode', value as 'mux' | 'separate')}
           >
-            <Label>Modo</Label>
-            <Select.Trigger>
-              <Select.Value />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item key="separate" textValue="Arquivo Separado">
-                  Arquivo Separado
-                </ListBox.Item>
-                <ListBox.Item key="mux" textValue="Mux no Vídeo (MKV)">
-                  Mux no Vídeo (MKV)
-                </ListBox.Item>
-              </ListBox>
-            </Select.Popover>
+            <Label className="sr-only">Modo</Label>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Selecione o modo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="separate">Arquivo Separado</SelectItem>
+              <SelectItem value="mux">Mux no Vídeo (MKV)</SelectItem>
+            </SelectContent>
           </Select>
         </div>
 
@@ -59,7 +55,7 @@ export function OutputSettings() {
                 placeholder="Mesma pasta do original"
                 className="flex-1"
               />
-              <Button variant="ghost" onPress={selectOutputDir}>
+              <Button variant="ghost" onClick={selectOutputDir}>
                 Selecionar
               </Button>
             </div>
@@ -76,7 +72,7 @@ export function OutputSettings() {
                 placeholder="por"
                 className="w-32"
               />
-              <p className="text-xs text-default-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Código ISO 639-2 (ex: por, eng, spa)
               </p>
             </div>
@@ -93,11 +89,11 @@ export function OutputSettings() {
           </>
         )}
 
-        <div className="p-3 bg-default-100 rounded-lg">
+        <div className="p-3 bg-muted/50 rounded-lg">
           <p className="text-sm">
             <span className="font-medium">Arquivos originais:</span> Preservados
           </p>
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             {settings.outputMode === 'mux' 
               ? 'Legendas salvas como .translated.ass e vídeo muxado como .muxed.mkv'
               : 'Legendas traduzidas salvas como .translated.ass'}

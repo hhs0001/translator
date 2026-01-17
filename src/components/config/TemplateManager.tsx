@@ -1,4 +1,9 @@
-import { Card, Button, Modal, TextArea, Label, Input } from '@heroui/react';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Template } from '../../types';
@@ -70,13 +75,13 @@ export function TemplateManager() {
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold">Templates de Prompt</h3>
-        <Button variant="primary" size="sm" onPress={openNewModal}>
+        <Button variant="default" size="sm" onClick={openNewModal}>
           + Novo Template
         </Button>
       </div>
 
       {templates.length === 0 ? (
-        <p className="text-default-500 text-center py-4">
+        <p className="text-muted-foreground text-center py-4">
           Nenhum template criado ainda
         </p>
       ) : (
@@ -84,22 +89,22 @@ export function TemplateManager() {
           {templates.map((template) => (
             <div
               key={template.id}
-              className="flex items-center justify-between p-3 bg-default-100 rounded-lg"
+              className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
             >
               <div>
                 <p className="font-medium">{template.name}</p>
-                <p className="text-sm text-default-500 truncate max-w-md">
+                <p className="text-sm text-muted-foreground truncate max-w-md">
                   {template.content}
                 </p>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" variant="ghost" onPress={() => openEditModal(template)}>
+                <Button size="sm" variant="ghost" onClick={() => openEditModal(template)}>
                   Editar
                 </Button>
                 <Button
                   size="sm"
-                  variant="danger"
-                  onPress={() => openDeleteConfirm(template.id)}
+                  variant="destructive"
+                  onClick={() => openDeleteConfirm(template.id)}
                 >
                   Excluir
                 </Button>
@@ -110,72 +115,58 @@ export function TemplateManager() {
       )}
 
       {/* Modal de Edição/Criação */}
-      <Modal isOpen={isModalOpen} onOpenChange={setIsModalOpen}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-[500px]">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading>{editingTemplate ? 'Editar Template' : 'Novo Template'}</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-1">
-                    <Label>Nome</Label>
-                    <Input
-                      placeholder="Ex: Anime Informal"
-                      value={name}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Label>Conteúdo do Prompt</Label>
-                    <TextArea
-                      placeholder="Digite o prompt..."
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      className="min-h-[200px]"
-                    />
-                  </div>
-                </div>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button variant="ghost" onPress={() => setIsModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button variant="primary" onPress={handleSave} isDisabled={isSaving}>
-                  {isSaving ? 'Salvando...' : 'Salvar'}
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{editingTemplate ? 'Editar Template' : 'Novo Template'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex flex-col gap-1">
+              <Label>Nome</Label>
+              <Input
+                placeholder="Ex: Anime Informal"
+                value={name}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <Label>Conteúdo do Prompt</Label>
+              <Textarea
+                placeholder="Digite o prompt..."
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                className="min-h-[200px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button variant="default" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Confirmação de Exclusão */}
-      <Modal isOpen={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
-        <Modal.Backdrop>
-          <Modal.Container>
-            <Modal.Dialog className="sm:max-w-[400px]">
-              <Modal.CloseTrigger />
-              <Modal.Header>
-                <Modal.Heading>Confirmar Exclusão</Modal.Heading>
-              </Modal.Header>
-              <Modal.Body>
-                <p>Tem certeza que deseja excluir este template? Esta ação não pode ser desfeita.</p>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button variant="ghost" onPress={() => setIsDeleteModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button variant="danger" onPress={handleDelete} isDisabled={isDeleting}>
-                  {isDeleting ? 'Excluindo...' : 'Excluir'}
-                </Button>
-              </Modal.Footer>
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar Exclusão</DialogTitle>
+          </DialogHeader>
+          <p>Tem certeza que deseja excluir este template? Esta ação não pode ser desfeita.</p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? 'Excluindo...' : 'Excluir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

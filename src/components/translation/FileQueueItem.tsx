@@ -1,4 +1,8 @@
-import { Button, Chip, Select, Label, ListBox, Spinner } from '@heroui/react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Spinner } from '@/components/ui/spinner';
 import { QueueFile, FileStatus } from '../../types';
 import { useTranslationStore } from '../../stores/translationStore';
 
@@ -7,16 +11,16 @@ interface Props {
   index: number;
 }
 
-const STATUS_CONFIG: Record<FileStatus, { label: string; color: 'default' | 'accent' | 'success' | 'warning' | 'danger' }> = {
-  pending: { label: 'Pendente', color: 'default' },
-  extracting: { label: 'Extraindo', color: 'accent' },
-  translating: { label: 'Traduzindo', color: 'accent' },
-  detecting_language: { label: 'Detectando Idioma', color: 'accent' },
-  saving: { label: 'Salvando', color: 'accent' },
-  muxing: { label: 'Muxando', color: 'accent' },
-  paused: { label: 'Pausado', color: 'warning' },
-  completed: { label: 'Concluído', color: 'success' },
-  error: { label: 'Erro', color: 'danger' },
+const STATUS_CONFIG: Record<FileStatus, { label: string; className: string }> = {
+  pending: { label: 'Pendente', className: 'bg-muted text-muted-foreground' },
+  extracting: { label: 'Extraindo', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
+  translating: { label: 'Traduzindo', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
+  detecting_language: { label: 'Detectando Idioma', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
+  saving: { label: 'Salvando', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
+  muxing: { label: 'Muxando', className: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
+  paused: { label: 'Pausado', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' },
+  completed: { label: 'Concluído', className: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' },
+  error: { label: 'Erro', className: 'bg-destructive/15 text-destructive' },
 };
 
 function getTrackLabel(track: { index: number; codec: string; language?: string; title?: string }) {
@@ -36,36 +40,40 @@ export function FileQueueItem({ file, index }: Props) {
   const hasTracks = file.subtitleTracks && file.subtitleTracks.length > 0;
   const noTracks = file.subtitleTracks && file.subtitleTracks.length === 0 && !file.isLoadingTracks;
 
-  const handleTrackChange = (key: React.Key | null) => {
-    if (key !== null) {
-      setSelectedTrack(file.id, Number(key));
+  const handleTrackChange = (value: string) => {
+    if (value !== '') {
+      setSelectedTrack(file.id, Number(value));
     }
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-default-100 rounded-lg">
-      <div className="w-6 text-center text-default-400 text-sm">
+    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+      <div className="w-6 text-center text-muted-foreground text-sm">
         {index + 1}
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium truncate">{file.name}</span>
-          <Chip size="sm" color={config.color} variant="soft">
+          <Badge variant="outline" className={`border-transparent ${config.className}`}>
             {config.label}
-          </Chip>
-          {isVideo && <Chip size="sm" variant="soft">Video</Chip>}
+          </Badge>
+          {isVideo && (
+            <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">
+              Video
+            </Badge>
+          )}
         </div>
 
         {isVideo && file.isLoadingTracks && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-default-500">
-            <Spinner size="sm" />
+          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+            <Spinner className="size-3" />
             <span>Detectando faixas...</span>
           </div>
         )}
 
         {isVideo && noTracks && (
-          <p className="text-xs text-warning mt-2">
+          <p className="text-xs text-amber-600 mt-2">
             Nenhuma faixa de legenda encontrada
           </p>
         )}
@@ -73,34 +81,28 @@ export function FileQueueItem({ file, index }: Props) {
         {isVideo && hasTracks && (
           <div className="mt-2">
             <Select
-              aria-label="Selecionar faixa de legenda"
-              selectedKey={String(file.selectedTrackIndex ?? 0)}
-              onSelectionChange={handleTrackChange}
-              className="w-full max-w-xs"
-              isDisabled={isProcessing}
+              value={String(file.selectedTrackIndex ?? 0)}
+              onValueChange={handleTrackChange}
+              disabled={isProcessing}
             >
               <Label className="sr-only">Faixa de legenda</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {file.subtitleTracks!.map((track) => (
-                    <ListBox.Item id={String(track.index)} key={track.index} textValue={getTrackLabel(track)}>
-                      {getTrackLabel(track)}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
+              <SelectTrigger className="w-full max-w-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {file.subtitleTracks!.map((track) => (
+                  <SelectItem key={track.index} value={String(track.index)}>
+                    {getTrackLabel(track)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
           </div>
         )}
 
         {isProcessing && (
           <div className="mt-2">
-            <div className="flex items-center justify-between text-xs text-default-500 mb-1">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
               <span>
                 {file.status === 'translating' && file.totalLines > 0
                   ? `${file.translatedLines}/${file.totalLines} linhas`
@@ -108,7 +110,7 @@ export function FileQueueItem({ file, index }: Props) {
               </span>
               <span className="font-medium">{Math.round(file.progress)}%</span>
             </div>
-            <div className="h-2 bg-default-200 rounded-full overflow-hidden">
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary transition-all duration-300 ease-out"
                 style={{ width: `${file.progress}%` }}
@@ -118,18 +120,19 @@ export function FileQueueItem({ file, index }: Props) {
         )}
 
         {file.error && (
-          <p className="text-xs text-danger mt-1 truncate">
+          <p className="text-xs text-destructive mt-1 truncate">
             {file.error}
           </p>
         )}
       </div>
 
       <Button
-        size="sm"
-        variant="danger-soft"
-        isIconOnly
-        onPress={() => removeFile(file.id)}
-        isDisabled={isProcessing}
+        size="icon-sm"
+        variant="ghost"
+        className="text-destructive hover:text-destructive"
+        onClick={() => removeFile(file.id)}
+        disabled={isProcessing}
+        aria-label="Remover arquivo"
       >
         ✕
       </Button>

@@ -1,4 +1,7 @@
-import { Card, Button, Chip, Alert } from '@heroui/react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -17,34 +20,61 @@ export function FfmpegStatus() {
       <h3 className="text-lg font-semibold mb-4">FFmpeg</h3>
 
       <div className="flex items-center gap-4">
-        <Button onPress={handleCheck} isDisabled={isChecking}>
+        <Button onClick={handleCheck} disabled={isChecking}>
           {isChecking ? 'Verificando...' : 'Verificar FFmpeg'}
         </Button>
 
         {ffmpegInstalled !== null && (
-          <Chip color={ffmpegInstalled ? 'success' : 'danger'}>
+          <Badge
+            variant="outline"
+            className={
+              ffmpegInstalled
+                ? 'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                : 'border-transparent bg-destructive/15 text-destructive'
+            }
+          >
             {ffmpegInstalled ? 'Instalado' : 'Não encontrado'}
-          </Chip>
+          </Badge>
         )}
       </div>
 
       {ffmpegInstalled === false && (
-        <Alert color="danger" className="mt-4">
-          <Alert.Title>FFmpeg não encontrado</Alert.Title>
-          <Alert.Description>
+        <Alert variant="destructive" className="mt-4">
+          <AlertTitle>FFmpeg não encontrado</AlertTitle>
+          <AlertDescription>
             O FFmpeg é necessário para extrair legendas de vídeos.
             Instale-o e adicione ao PATH do sistema.
-          </Alert.Description>
+          </AlertDescription>
         </Alert>
       )}
 
       <div className="mt-4 flex gap-2">
-        <Chip color="success" variant="soft">SRT</Chip>
-        <Chip color="success" variant="soft">ASS</Chip>
-        <Chip color="success" variant="soft">SSA</Chip>
-        <Chip color="warning" variant="soft">VTT (em breve)</Chip>
+        <Badge
+          variant="outline"
+          className="border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+        >
+          SRT
+        </Badge>
+        <Badge
+          variant="outline"
+          className="border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+        >
+          ASS
+        </Badge>
+        <Badge
+          variant="outline"
+          className="border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+        >
+          SSA
+        </Badge>
+        <Badge
+          variant="outline"
+          className="border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300"
+        >
+          VTT (em breve)
+        </Badge>
       </div>
-      <p className="text-xs text-default-500 mt-2">
+      <p className="text-xs text-muted-foreground mt-2">
         ASS/SSA preservam melhor estilos e formatação
       </p>
     </Card>

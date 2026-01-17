@@ -1,4 +1,8 @@
-import { Card, Input, Switch, Select, Label, ListBox } from '@heroui/react';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 const BATCH_PRESETS = [
@@ -11,11 +15,11 @@ const BATCH_PRESETS = [
 export function TranslationSettings() {
   const { settings, updateSetting } = useSettingsStore();
 
-  const handleBatchSelect = (key: React.Key | null) => {
-    if (key) {
-      const value = Number(key);
-      if (!isNaN(value) && value > 0) {
-        updateSetting('batchSize', value);
+  const handleBatchSelect = (value: string) => {
+    if (value) {
+      const parsed = Number(value);
+      if (!isNaN(parsed) && parsed > 0) {
+        updateSetting('batchSize', parsed);
       }
     }
   };
@@ -36,27 +40,20 @@ export function TranslationSettings() {
           <label className="block text-sm font-medium mb-1">Tamanho do Batch</label>
           <div className="flex gap-2">
             <Select
-              aria-label="Tamanho do batch"
-              selectedKey={String(settings.batchSize)}
-              onSelectionChange={handleBatchSelect}
-              className="flex-1"
-              placeholder="Selecione"
+              value={String(settings.batchSize)}
+              onValueChange={handleBatchSelect}
             >
               <Label className="sr-only">Tamanho</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {BATCH_PRESETS.map((preset) => (
-                    <ListBox.Item id={String(preset.value)} key={String(preset.value)} textValue={preset.label}>
-                      {preset.label}
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  ))}
-                </ListBox>
-              </Select.Popover>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {BATCH_PRESETS.map((preset) => (
+                  <SelectItem key={String(preset.value)} value={String(preset.value)}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             <Input
               type="number"
@@ -67,7 +64,7 @@ export function TranslationSettings() {
               max={500}
             />
           </div>
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Quantidade de linhas enviadas por requisição
           </p>
         </div>
@@ -82,7 +79,7 @@ export function TranslationSettings() {
             min={1}
             max={10}
           />
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Número de batches enviados em paralelo por arquivo (ex: 4 x 50 linhas = 200 linhas simultâneas)
           </p>
         </div>
@@ -97,7 +94,7 @@ export function TranslationSettings() {
             min={1}
             max={10}
           />
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Número de arquivos processados simultaneamente
           </p>
         </div>
@@ -115,25 +112,23 @@ export function TranslationSettings() {
         </div>
 
         <div className="space-y-3 pt-2">
-          <Switch.Root
-            isSelected={settings.autoContinue}
-            onChange={(checked: boolean) => updateSetting('autoContinue', checked)}
-          >
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-            <Label>Continuar automaticamente (respostas parciais)</Label>
-          </Switch.Root>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="auto-continue"
+              checked={settings.autoContinue}
+              onCheckedChange={(checked) => updateSetting('autoContinue', checked)}
+            />
+            <Label htmlFor="auto-continue">Continuar automaticamente (respostas parciais)</Label>
+          </div>
 
-          <Switch.Root
-            isSelected={settings.continueOnError}
-            onChange={(checked: boolean) => updateSetting('continueOnError', checked)}
-          >
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-            <Label>Continuar fila em caso de erro</Label>
-          </Switch.Root>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="continue-on-error"
+              checked={settings.continueOnError}
+              onCheckedChange={(checked) => updateSetting('continueOnError', checked)}
+            />
+            <Label htmlFor="continue-on-error">Continuar fila em caso de erro</Label>
+          </div>
         </div>
       </div>
     </Card>

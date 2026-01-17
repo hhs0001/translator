@@ -1,4 +1,6 @@
-import { Button, Chip, Tabs } from '@heroui/react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTranslationStore } from '../../stores/translationStore';
 import { useLogsStore } from '../../stores/logsStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -37,64 +39,58 @@ export function Navbar({ activeTab, onTabChange }: Props) {
   };
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50 bg-default border-b border-divider h-16">
+    <nav className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border h-16">
       <div className="container mx-auto px-4 h-full flex items-center justify-between">
         <div className="flex items-center gap-6">
           <h1 className="text-xl font-bold">SubTranslator</h1>
 
-          <Tabs.Root
-            selectedKey={activeTab}
-            onSelectionChange={(key) => onTabChange(key as string)}
-            className="hidden sm:flex"
-          >
-            <Tabs.ListContainer>
-              <Tabs.List>
-                <Tabs.Tab id="translation">
-                  Tradução
-                  <Tabs.Indicator />
-                </Tabs.Tab>
-                <Tabs.Tab id="config">
-                  Configurações
-                  <Tabs.Indicator />
-                </Tabs.Tab>
-              </Tabs.List>
-            </Tabs.ListContainer>
-          </Tabs.Root>
+          <Tabs value={activeTab} onValueChange={onTabChange} className="hidden sm:flex">
+            <TabsList>
+              <TabsTrigger value="translation">Tradução</TabsTrigger>
+              <TabsTrigger value="config">Configurações</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
         <div className="flex items-center gap-3">
           {ffmpegInstalled !== null && (
-            <Chip
-              color={ffmpegInstalled ? 'success' : 'danger'}
-              size="sm"
-              variant="soft"
+            <Badge
+              variant="outline"
+              className={
+                ffmpegInstalled
+                  ? 'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                  : 'border-transparent bg-destructive/15 text-destructive'
+              }
             >
               FFmpeg {ffmpegInstalled ? 'OK' : 'N/A'}
-            </Chip>
+            </Badge>
           )}
 
           {pendingCount > 0 && (
-            <Chip color="accent" size="sm" variant="soft">
+            <Badge
+              variant="outline"
+              className="border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300"
+            >
               {pendingCount} na fila
-            </Chip>
+            </Badge>
           )}
 
           <Button
-            variant={isProcessing && !isPaused ? 'secondary' : 'primary'}
-            onPress={handleTranslateClick}
-            isDisabled={queue.length === 0 && !isTranslating}
+            variant={isProcessing && !isPaused ? 'secondary' : 'default'}
+            onClick={handleTranslateClick}
+            disabled={queue.length === 0 && !isTranslating}
           >
             {getTranslateButtonText()}
           </Button>
 
           <Button
             variant="ghost"
-            onPress={toggleDrawer}
+            onClick={toggleDrawer}
             className="relative"
           >
             Logs
             {errorCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-danger text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 bg-destructive text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                 {errorCount}
               </span>
             )}

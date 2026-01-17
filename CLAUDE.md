@@ -75,7 +75,7 @@ Settings: `load_settings`, `save_settings`, `load_templates`, `add_template`, `u
 
 ## Tech Stack Notes
 
-- **HeroUI** (beta) for component library - built on Radix UI
+- **ShadcnUI** for component library
 - **TailwindCSS 4.1** for styling
 - **Tokio** async runtime in Rust backend
 - **reqwest** for HTTP client (LLM API calls)

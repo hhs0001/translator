@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Card, Input, Select, Label, ListBox, Accordion, Button } from '@heroui/react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useModels } from '../../hooks/useModels';
 import { Header, ApiFormat } from '../../types';
@@ -41,16 +46,12 @@ export function ApiSettings() {
     updateSetting('headers', settings.headers.filter((h) => h.id !== id));
   };
 
-  const handleModelChange = (key: React.Key | null) => {
-    if (key) {
-      updateSetting('model', String(key));
-    }
+  const handleModelChange = (value: string) => {
+    updateSetting('model', value);
   };
 
-  const handleFormatChange = (key: React.Key | null) => {
-    if (key) {
-      updateSetting('apiFormat', key as ApiFormat);
-    }
+  const handleFormatChange = (value: string) => {
+    updateSetting('apiFormat', value as ApiFormat);
   };
 
   const formatDisplayName = detectedFormat === 'anthropic' ? 'Anthropic' : 'OpenAI';
@@ -68,9 +69,9 @@ export function ApiSettings() {
             onChange={(e) => updateSetting('baseUrl', e.target.value)}
             className="w-full"
           />
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             O endpoint sera adicionado automaticamente.
-            <span className="ml-2 px-2 py-0.5 rounded bg-default-100 text-default-600 font-medium">
+            <span className="ml-2 px-2 py-0.5 rounded bg-muted text-muted-foreground font-medium">
               Formato: {formatDisplayName}
             </span>
           </p>
@@ -78,35 +79,18 @@ export function ApiSettings() {
 
         <div>
           <label className="block text-sm font-medium mb-1">Formato da API</label>
-          <Select
-            aria-label="Formato da API"
-            selectedKey={settings.apiFormat}
-            onSelectionChange={handleFormatChange}
-            className="w-full"
-          >
+          <Select value={settings.apiFormat} onValueChange={handleFormatChange}>
             <Label className="sr-only">Formato da API</Label>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item id="auto" key="auto" textValue="Auto-detectar">
-                  Auto-detectar
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-                <ListBox.Item id="openai" key="openai" textValue="OpenAI Compatible">
-                  OpenAI Compatible
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-                <ListBox.Item id="anthropic" key="anthropic" textValue="Anthropic">
-                  Anthropic
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-              </ListBox>
-            </Select.Popover>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Selecione o formato" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">Auto-detectar</SelectItem>
+              <SelectItem value="openai">OpenAI Compatible</SelectItem>
+              <SelectItem value="anthropic">Anthropic</SelectItem>
+            </SelectContent>
           </Select>
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Selecione o formato da API ou deixe em auto-detectar
           </p>
         </div>
@@ -133,59 +117,47 @@ export function ApiSettings() {
           />
           <div className="flex gap-2">
             <Select
-              aria-label="Selecionar modelo"
-              selectedKey={settings.model || undefined}
-              onSelectionChange={handleModelChange}
-              className="flex-1"
-              isDisabled={isLoading || models.length === 0}
-              placeholder={isLoading ? 'Carregando...' : 'Selecione um modelo'}
+              value={settings.model}
+              onValueChange={handleModelChange}
+              disabled={isLoading || models.length === 0}
             >
               <Label className="sr-only">Modelo</Label>
-              <Select.Trigger>
-                <Select.Value />
-                <Select.Indicator />
-              </Select.Trigger>
-              <Select.Popover>
-                <ListBox>
-                  {filteredModels.length === 0 ? (
-                    <ListBox.Item
-                      id="no-results"
-                      key="no-results"
-                      textValue="Nenhum modelo encontrado"
-                      isDisabled
-                    >
-                      Nenhum modelo encontrado
-                    </ListBox.Item>
-                  ) : (
-                    filteredModels.map((model) => {
-                      const displayName = model.name || model.id;
-                      const contextInfo = model.context_length
-                        ? ` (${Math.round(model.context_length / 1000)}k ctx)`
-                        : '';
-                      return (
-                        <ListBox.Item id={model.id} key={model.id} textValue={displayName}>
-                          <div className="flex flex-col">
-                            <span>
-                              {displayName}
-                              {contextInfo}
-                            </span>
-                            {model.name && (
-                              <span className="text-xs text-default-400">{model.id}</span>
-                            )}
-                          </div>
-                          <ListBox.ItemIndicator />
-                        </ListBox.Item>
-                      );
-                    })
-                  )}
-                </ListBox>
-              </Select.Popover>
+              <SelectTrigger className="flex-1">
+                <SelectValue placeholder={isLoading ? 'Carregando...' : 'Selecione um modelo'} />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredModels.length === 0 ? (
+                  <SelectItem value="no-results" disabled>
+                    Nenhum modelo encontrado
+                  </SelectItem>
+                ) : (
+                  filteredModels.map((model) => {
+                    const displayName = model.name || model.id;
+                    const contextInfo = model.context_length
+                      ? ` (${Math.round(model.context_length / 1000)}k ctx)`
+                      : '';
+                    return (
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex flex-col">
+                          <span>
+                            {displayName}
+                            {contextInfo}
+                          </span>
+                          {model.name && (
+                            <span className="text-xs text-muted-foreground">{model.id}</span>
+                          )}
+                        </div>
+                      </SelectItem>
+                    );
+                  })
+                )}
+              </SelectContent>
             </Select>
-            <Button variant="ghost" onPress={refetch} isDisabled={isLoading}>
+            <Button variant="ghost" onClick={refetch} disabled={isLoading}>
               {String.fromCodePoint(0x21bb)}
             </Button>
           </div>
-          {error && <p className="text-xs text-danger mt-1">{error}</p>}
+          {error && <p className="text-xs text-destructive mt-1">{error}</p>}
         </div>
 
         <div>
@@ -196,7 +168,7 @@ export function ApiSettings() {
             onChange={(e) => updateSetting('customModel', e.target.value)}
             className="w-full"
           />
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Se preenchido, sera usado em vez do modelo selecionado acima
           </p>
         </div>
@@ -204,88 +176,73 @@ export function ApiSettings() {
         <div>
           <label className="block text-sm font-medium mb-1">Modelo para Deteccao de Idioma (opcional)</label>
           <Select
-            aria-label="Modelo para deteccao de idioma"
-            selectedKey={settings.languageDetectionModel || undefined}
-            onSelectionChange={(key) => updateSetting('languageDetectionModel', key ? String(key) : '')}
-            className="w-full"
-            isDisabled={isLoading || models.length === 0}
-            placeholder="Nenhum (usar configuracao manual)"
+            value={settings.languageDetectionModel || 'none'}
+            onValueChange={(value) =>
+              updateSetting('languageDetectionModel', value === 'none' ? '' : value)
+            }
+            disabled={isLoading || models.length === 0}
           >
             <Label className="sr-only">Modelo para Deteccao</Label>
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item id="" key="none" textValue="Nenhum">
-                  Nenhum (usar configuracao manual)
-                  <ListBox.ItemIndicator />
-                </ListBox.Item>
-                {models.map((model) => {
-                  const displayName = model.name || model.id;
-                  return (
-                    <ListBox.Item id={model.id} key={model.id} textValue={displayName}>
-                      <div className="flex flex-col">
-                        <span>{displayName}</span>
-                        {model.name && (
-                          <span className="text-xs text-default-400">{model.id}</span>
-                        )}
-                      </div>
-                      <ListBox.ItemIndicator />
-                    </ListBox.Item>
-                  );
-                })}
-              </ListBox>
-            </Select.Popover>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Nenhum (usar configuracao manual)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Nenhum (usar configuracao manual)</SelectItem>
+              {models.map((model) => {
+                const displayName = model.name || model.id;
+                return (
+                  <SelectItem key={model.id} value={model.id}>
+                    <div className="flex flex-col">
+                      <span>{displayName}</span>
+                      {model.name && (
+                        <span className="text-xs text-muted-foreground">{model.id}</span>
+                      )}
+                    </div>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
           </Select>
-          <p className="text-xs text-default-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Modelo leve para detectar o idioma da traducao e usar no mux (ex: gemma-3-1b)
           </p>
         </div>
 
-        <Accordion.Root variant="surface">
-          <Accordion.Item id="headers">
-            <Accordion.Heading>
-              <Accordion.Trigger>
-                Headers Avancados
-                <Accordion.Indicator />
-              </Accordion.Trigger>
-            </Accordion.Heading>
-            <Accordion.Panel>
-              <Accordion.Body>
-                <div className="space-y-2">
-                  {settings.headers.map((header) => (
-                    <div key={header.id} className="flex gap-2">
-                      <Input
-                        placeholder="Header-Name"
-                        value={header.key}
-                        onChange={(e) => updateHeader(header.id, 'key', e.target.value)}
-                        className="flex-1"
-                      />
-                      <Input
-                        placeholder="Value"
-                        value={header.value}
-                        onChange={(e) => updateHeader(header.id, 'value', e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onPress={() => removeHeader(header.id)}
-                      >
-                        {String.fromCodePoint(0x2715)}
-                      </Button>
-                    </div>
-                  ))}
-                  <Button variant="primary" size="sm" onPress={addHeader}>
-                    + Adicionar Header
-                  </Button>
-                </div>
-              </Accordion.Body>
-            </Accordion.Panel>
-          </Accordion.Item>
-        </Accordion.Root>
+        <Accordion type="single" collapsible>
+          <AccordionItem value="headers">
+            <AccordionTrigger>Headers Avancados</AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2">
+                {settings.headers.map((header) => (
+                  <div key={header.id} className="flex gap-2">
+                    <Input
+                      placeholder="Header-Name"
+                      value={header.key}
+                      onChange={(e) => updateHeader(header.id, 'key', e.target.value)}
+                      className="flex-1"
+                    />
+                    <Input
+                      placeholder="Value"
+                      value={header.value}
+                      onChange={(e) => updateHeader(header.id, 'value', e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => removeHeader(header.id)}
+                    >
+                      {String.fromCodePoint(0x2715)}
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="default" size="sm" onClick={addHeader}>
+                  + Adicionar Header
+                </Button>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
     </Card>
   );

@@ -1,4 +1,4 @@
-import { Tabs } from '@heroui/react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileDropZone } from './FileDropZone';
 import { FileQueue } from './FileQueue';
 import { SubtitleEditor } from './SubtitleEditor';
@@ -10,21 +10,13 @@ export function TranslationPage() {
 
   return (
     <div className="space-y-6">
-      <Tabs.Root className="w-full">
-        <Tabs.ListContainer>
-          <Tabs.List aria-label="Modo de tradução">
-            <Tabs.Tab id="single">
-              Single
-              <Tabs.Indicator />
-            </Tabs.Tab>
-            <Tabs.Tab id="batch">
-              Batch
-              <Tabs.Indicator />
-            </Tabs.Tab>
-          </Tabs.List>
-        </Tabs.ListContainer>
+      <Tabs defaultValue="single" className="w-full">
+        <TabsList aria-label="Modo de tradução">
+          <TabsTrigger value="single">Single</TabsTrigger>
+          <TabsTrigger value="batch">Batch</TabsTrigger>
+        </TabsList>
 
-        <Tabs.Panel id="single" className="pt-4">
+        <TabsContent value="single" className="pt-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-4">
               <FileDropZone />
@@ -34,15 +26,15 @@ export function TranslationPage() {
               <SubtitleEditor file={currentFile} />
             )}
           </div>
-        </Tabs.Panel>
+        </TabsContent>
 
-        <Tabs.Panel id="batch" className="pt-4">
+        <TabsContent value="batch" className="pt-4">
           <div className="space-y-6">
             <FileDropZone />
             <FileQueue />
           </div>
-        </Tabs.Panel>
-      </Tabs.Root>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

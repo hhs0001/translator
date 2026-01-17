@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Button } from '@heroui/react';
+import { Button } from '@/components/ui/button';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
 import { useFileHandler } from '../../hooks/useFileHandler';
@@ -54,7 +54,7 @@ export function FileDropZone() {
         border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200
         ${isDragging
           ? 'border-primary bg-primary/10 scale-[1.02]'
-          : 'border-default-300 hover:border-primary/50'
+          : 'border-border hover:border-primary/50'
         }
       `}
     >
@@ -64,16 +64,16 @@ export function FileDropZone() {
           <p className="text-lg font-medium">
             Arraste arquivos aqui
           </p>
-          <p className="text-sm text-default-500 mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Suporta: SRT, ASS, SSA, MKV, MP4, AVI
           </p>
         </div>
         <div className="flex items-center gap-4 justify-center">
-          <div className="h-px bg-default-200 flex-1 max-w-16" />
-          <span className="text-default-400">ou</span>
-          <div className="h-px bg-default-200 flex-1 max-w-16" />
+          <div className="h-px bg-border flex-1 max-w-16" />
+          <span className="text-muted-foreground">ou</span>
+          <div className="h-px bg-border flex-1 max-w-16" />
         </div>
-        <Button variant="ghost" onPress={openFilePicker}>
+        <Button variant="ghost" onClick={openFilePicker}>
           Selecionar arquivos
         </Button>
       </div>

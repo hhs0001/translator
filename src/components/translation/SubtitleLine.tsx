@@ -1,4 +1,4 @@
-import { TextArea } from '@heroui/react';
+import { Textarea } from '@/components/ui/textarea';
 import { SubtitleEntry } from '../../types';
 
 interface Props {
@@ -16,12 +16,12 @@ export function SubtitleLine({ index, original, translated, onTranslationChange 
       data-index={index}
       className={`
         grid grid-cols-2 gap-2 p-2 rounded-lg transition-colors
-        ${isTranslated ? 'bg-success/10' : 'bg-default-100'}
+        ${isTranslated ? 'bg-emerald-500/10' : 'bg-muted/50'}
       `}
     >
       {/* Original */}
       <div className="text-sm">
-        <p className="text-xs text-default-500 mb-1">
+        <p className="text-xs text-muted-foreground mb-1">
           {original.start_time} → {original.end_time}
         </p>
         <p className="whitespace-pre-wrap">{original.text}</p>
@@ -29,7 +29,7 @@ export function SubtitleLine({ index, original, translated, onTranslationChange 
 
       {/* Translation */}
       <div>
-        <TextArea
+        <Textarea
           aria-label={`Tradução linha ${index + 1}`}
           value={translated?.text || ''}
           onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => onTranslationChange(e.target.value)}
