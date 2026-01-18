@@ -4,6 +4,9 @@ import { SubtitleLine } from './SubtitleLine';
 import { useTranslationStore } from '../../stores/translationStore';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
+// Debounce delay for scroll updates (in milliseconds)
+const SCROLL_DEBOUNCE_MS = 150;
+
 interface Props {
   file: QueueFile;
 }
@@ -44,12 +47,12 @@ function SubtitleEditorBase({ file }: Props) {
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
-      // Debounce de 150ms para agrupar updates rápidos
+      // Debounce scroll to batch rapid updates
       scrollTimeoutRef.current = setTimeout(() => {
         const lastIndex = Math.min(translatedCount - 1, entries.length - 1);
         const lastItem = scrollRef.current?.querySelector(`[data-index="${lastIndex}"]`);
         lastItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 150);
+      }, SCROLL_DEBOUNCE_MS);
     }
     return () => {
       if (scrollTimeoutRef.current) {

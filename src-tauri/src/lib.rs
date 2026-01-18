@@ -123,7 +123,7 @@ async fn translate_subtitle(
     // Traduz
     let translations = client.translate_subtitles(&system_prompt, &texts).await?;
 
-    // Aplica traduções de volta
+    // Apply translations back
     file.apply_translations(translations);
 
     Ok(file)
@@ -210,11 +210,11 @@ async fn translate_subtitle_full(
 ) -> Result<SubtitleTranslationResult, String> {
     let client = LlmClient::new(config);
 
-    // Extrai textos para tradução
+    // Extract texts for translation
     let texts = file.extract_texts();
     let total = texts.len();
 
-    // Se streaming está habilitado, usa modo streaming
+    // If streaming is enabled, use streaming mode
     if settings.streaming {
         let file_id_stream = file_id.clone();
         let app_stream = app.clone();
@@ -224,8 +224,9 @@ async fn translate_subtitle_full(
                 &system_prompt,
                 &texts,
                 settings.batch_size,
+                settings.max_retries,
                 move |entry| {
-                    // Emite evento para cada entrada traduzida
+                    // Emit event for each translated entry
                     let _ = app_stream.emit("translation:entry", StreamingEntryEvent {
                         file_id: file_id_stream.clone(),
                         index: entry.index,
@@ -237,7 +238,7 @@ async fn translate_subtitle_full(
 
         let translated_count = translations.len();
 
-        // Aplica traduções de volta
+        // Apply translations back
         file.apply_translations(translations);
 
         let progress = TranslationProgress {
@@ -248,7 +249,7 @@ async fn translate_subtitle_full(
             can_continue: translated_count < total,
         };
 
-        // Emite progresso final
+        // Emit final progress
         let _ = app.emit("translation:progress", ProgressEvent {
             file_id: file_id.clone(),
             progress: 100.0,
@@ -263,14 +264,14 @@ async fn translate_subtitle_full(
         });
     }
 
-    // Modo batch padrão
+    // Default batch mode
     let file_id_progress = file_id.clone();
     let file_id_retry = file_id.clone();
     let file_id_error = file_id.clone();
     let app_progress = app.clone();
     let app_retry = app.clone();
 
-    // Traduz com batching
+    // Translate with batching
     let TranslationBatchReport {
         translations,
         progress,
@@ -310,7 +311,7 @@ async fn translate_subtitle_full(
         )
         .await?;
 
-    // Aplica traduções de volta
+    // Apply translations back
     file.apply_translations(translations);
 
     Ok(SubtitleTranslationResult {

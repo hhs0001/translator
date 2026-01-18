@@ -4,7 +4,7 @@ use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Formato da API LLM
+/// LLM API format
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ApiFormat {
@@ -17,7 +17,7 @@ pub enum ApiFormat {
     Auto,
 }
 
-/// Configuração do cliente LLM
+/// LLM client configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmConfig {
@@ -104,6 +104,7 @@ fn default_parallel_requests() -> usize {
     1
 }
 
+/// Removes <think>...</think> blocks from LLM responses
 fn strip_think_blocks(input: &str) -> String {
     let mut output = input.to_string();
     loop {
@@ -289,7 +290,27 @@ pub struct TranslatedEntryEvent {
     pub text: String,
 }
 
-/// Cliente para comunicação com a API LLM
+/// Placeholder for newlines in subtitle text during translation
+const NEWLINE_PLACEHOLDER: &str = "<<NEWLINE>>";
+
+/// Parses a translation line in the format "INDEX|TEXT" and returns (index, translated_text)
+fn parse_translation_line(line: &str, placeholder: &str) -> Option<(usize, String)> {
+    if line.is_empty() || line.starts_with("```") {
+        return None;
+    }
+
+    let sep_pos = line.find('|')?;
+    let idx_str = &line[..sep_pos];
+    let idx = idx_str.trim().parse::<usize>().ok()?;
+    let text = line[sep_pos + 1..]
+        .replace(placeholder, "\n")
+        .replace("\\N", "\n")
+        .replace("\\n", "\n");
+
+    Some((idx, text))
+}
+
+/// LLM API client
 pub struct LlmClient {
     client: Client,
     config: LlmConfig,
@@ -559,29 +580,23 @@ impl LlmClient {
             .ok_or_else(|| "No response from model".to_string())
     }
 
-    /// Traduz legendas com streaming (OpenAI format only)
-    /// Emite eventos conforme cada entrada é traduzida
-    /// Usa batching para processar em grupos menores
+    /// Translates subtitles with streaming (OpenAI format only)
+    /// Emits events as each entry is translated
+    /// Uses batching to process in smaller groups
     pub async fn translate_subtitles_streaming(
         &self,
         system_prompt: &str,
         entries: &[(usize, String)],
         batch_size: usize,
+        max_retries: usize,
         mut on_entry: impl FnMut(TranslatedEntryEvent),
     ) -> Result<Vec<(usize, String)>, String> {
-        const NEWLINE_PLACEHOLDER: &str = "<<NEWLINE>>";
-
-        // Cria mapa de índices originais para validação
-        let original_map: HashMap<usize, String> = entries.iter().cloned().collect();
+        // Create map of original indices for ASS tag validation (using references to avoid cloning)
+        let original_map: HashMap<usize, &str> = entries.iter().map(|(i, s)| (*i, s.as_str())).collect();
         let mut all_results = Vec::new();
 
-        // Processa em batches
-        let batches: Vec<Vec<(usize, String)>> = entries
-            .chunks(batch_size)
-            .map(|chunk| chunk.to_vec())
-            .collect();
-
-        for batch in batches {
+        // Process in batches
+        for batch in entries.chunks(batch_size) {
             let formatted: String = batch
                 .iter()
                 .map(|(idx, text)| {
@@ -621,117 +636,127 @@ CRITICAL FORMAT INSTRUCTIONS:
                 stream: Some(true),
             };
 
-            let response = self
-                .apply_headers(
-                    self.client
-                        .post(&self.config.endpoint)
-                        .header("Content-Type", "application/json"),
-                )
-                .json(&request)
-                .send()
-                .await
-                .map_err(|e| format!("Translation request failed: {}", e))?;
+            // Retry loop for streaming batch
+            let mut attempt = 0;
+            let batch_results = loop {
+                attempt += 1;
 
-            if !response.status().is_success() {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                return Err(format!("Translation API error {}: {}", status, body));
-            }
+                let response = self
+                    .apply_headers(
+                        self.client
+                            .post(&self.config.endpoint)
+                            .header("Content-Type", "application/json"),
+                    )
+                    .json(&request)
+                    .send()
+                    .await;
 
-            let mut current_text = String::new();
-            let mut buffer = String::new();
-
-            let mut stream = response.bytes_stream();
-
-            while let Some(chunk_result) = stream.next().await {
-                let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
-                let chunk_str = String::from_utf8_lossy(&chunk);
-                buffer.push_str(&chunk_str);
-
-                // Process complete SSE lines
-                while let Some(newline_pos) = buffer.find('\n') {
-                    let line = buffer[..newline_pos].trim().to_string();
-                    buffer = buffer[newline_pos + 1..].to_string();
-
-                    if line.is_empty() || line == "data: [DONE]" {
+                let response = match response {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if attempt > max_retries {
+                            return Err(format!("Translation request failed: {}", e));
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                         continue;
                     }
+                };
 
-                    if let Some(json_str) = line.strip_prefix("data: ") {
-                        if let Ok(chunk) = serde_json::from_str::<StreamChunk>(json_str) {
-                            for choice in chunk.choices {
-                                if let Some(content) = choice.delta.content {
-                                    // Processa o conteúdo recebido caractere por caractere
-                                    for ch in content.chars() {
-                                        if ch == '\n' {
-                                            // Fim de uma linha - tenta parsear
-                                            let line_content = current_text.trim().to_string();
-                                            if !line_content.is_empty() && !line_content.starts_with("```") {
-                                                if let Some(sep_pos) = line_content.find('|') {
-                                                    let idx_str = &line_content[..sep_pos];
-                                                    if let Ok(idx) = idx_str.trim().parse::<usize>() {
-                                                        let text = line_content[sep_pos + 1..]
-                                                            .replace(NEWLINE_PLACEHOLDER, "\n")
-                                                            .replace("\\N", "\n")
-                                                            .replace("\\n", "\n");
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_default();
+                    if attempt > max_retries {
+                        return Err(format!("Translation API error {}: {}", status, body));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    continue;
+                }
 
-                                                        // Verifica compatibilidade de tags ASS
-                                                        let should_emit = if let Some(original_text) = original_map.get(&idx) {
-                                                            Self::tags_compatible(original_text, &text)
-                                                        } else {
-                                                            true
-                                                        };
+                let mut current_text = String::new();
+                let mut buffer = String::new();
+                let mut batch_results = Vec::new();
+
+                let mut stream = response.bytes_stream();
+
+                while let Some(chunk_result) = stream.next().await {
+                    let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
+                    let chunk_str = String::from_utf8_lossy(&chunk);
+                    buffer.push_str(&chunk_str);
+
+                    // Process complete SSE lines
+                    while let Some(newline_pos) = buffer.find('\n') {
+                        let line = buffer[..newline_pos].trim().to_string();
+                        buffer = buffer[newline_pos + 1..].to_string();
+
+                        if line.is_empty() || line == "data: [DONE]" {
+                            continue;
+                        }
+
+                        if let Some(json_str) = line.strip_prefix("data: ") {
+                            match serde_json::from_str::<StreamChunk>(json_str) {
+                                Ok(chunk) => {
+                                    for choice in chunk.choices {
+                                        if let Some(content) = choice.delta.content {
+                                            // Process received content character by character
+                                            for ch in content.chars() {
+                                                if ch == '\n' {
+                                                    // End of a line - try to parse
+                                                    let line_content = current_text.trim().to_string();
+                                                    if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
+                                                        // Validate ASS tag compatibility
+                                                        let should_emit = original_map
+                                                            .get(&idx)
+                                                            .map(|orig| Self::tags_compatible(orig, &text))
+                                                            .unwrap_or(true);
 
                                                         if should_emit {
-                                                            // Emite evento imediatamente
                                                             on_entry(TranslatedEntryEvent {
                                                                 index: idx,
                                                                 text: text.clone(),
                                                             });
-                                                            all_results.push((idx, text));
+                                                            batch_results.push((idx, text));
                                                         }
                                                     }
+                                                    current_text.clear();
+                                                } else {
+                                                    current_text.push(ch);
                                                 }
                                             }
-                                            current_text.clear();
-                                        } else {
-                                            current_text.push(ch);
                                         }
                                     }
+                                }
+                                Err(e) => {
+                                    // Log invalid JSON chunks in debug mode for troubleshooting
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("Failed to parse SSE chunk: {} - JSON: {}", e, json_str);
+                                    let _ = e; // Suppress unused warning in release
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // Processa última linha do batch se houver
-            let line_content = current_text.trim().to_string();
-            if !line_content.is_empty() && !line_content.starts_with("```") {
-                if let Some(sep_pos) = line_content.find('|') {
-                    let idx_str = &line_content[..sep_pos];
-                    if let Ok(idx) = idx_str.trim().parse::<usize>() {
-                        let text = line_content[sep_pos + 1..]
-                            .replace(NEWLINE_PLACEHOLDER, "\n")
-                            .replace("\\N", "\n")
-                            .replace("\\n", "\n");
+                // Process last line of the batch if any
+                let line_content = current_text.trim().to_string();
+                if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
+                    let should_emit = original_map
+                        .get(&idx)
+                        .map(|orig| Self::tags_compatible(orig, &text))
+                        .unwrap_or(true);
 
-                        let should_emit = if let Some(original_text) = original_map.get(&idx) {
-                            Self::tags_compatible(original_text, &text)
-                        } else {
-                            true
-                        };
-
-                        if should_emit {
-                            on_entry(TranslatedEntryEvent {
-                                index: idx,
-                                text: text.clone(),
-                            });
-                            all_results.push((idx, text));
-                        }
+                    if should_emit {
+                        on_entry(TranslatedEntryEvent {
+                            index: idx,
+                            text: text.clone(),
+                        });
+                        batch_results.push((idx, text));
                     }
                 }
-            }
+
+                break batch_results;
+            };
+
+            all_results.extend(batch_results);
         }
 
         if all_results.is_empty() {
