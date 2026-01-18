@@ -8,7 +8,10 @@
       "Bash(tree:*)",
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:openrouter.ai)",
-      "Bash(git show:*)"
+      "Bash(git show:*)",
+      "Bash(gh pr list)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr diff:*)"
     ]
   }
 }
