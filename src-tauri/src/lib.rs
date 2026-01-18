@@ -123,7 +123,7 @@ async fn translate_subtitle(
     // Traduz
     let translations = client.translate_subtitles(&system_prompt, &texts).await?;
 
-    // Aplica traduções de volta
+    // Apply translations back
     file.apply_translations(translations);
 
     Ok(file)
@@ -189,6 +189,15 @@ struct ErrorEvent {
     retry_count: usize,
 }
 
+/// Evento de streaming de entrada traduzida
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamingEntryEvent {
+    file_id: String,
+    index: usize,
+    text: String,
+}
+
 /// Traduz arquivo completo com batching e auto-continue
 #[tauri::command]
 async fn translate_subtitle_full(
@@ -201,15 +210,68 @@ async fn translate_subtitle_full(
 ) -> Result<SubtitleTranslationResult, String> {
     let client = LlmClient::new(config);
 
-    // Extrai textos para tradução
+    // Extract texts for translation
     let texts = file.extract_texts();
+    let total = texts.len();
+
+    // If streaming is enabled, use streaming mode
+    if settings.streaming {
+        let file_id_stream = file_id.clone();
+        let app_stream = app.clone();
+
+        let translations = client
+            .translate_subtitles_streaming(
+                &system_prompt,
+                &texts,
+                settings.batch_size,
+                settings.max_retries,
+                move |entry| {
+                    // Emit event for each translated entry
+                    let _ = app_stream.emit("translation:entry", StreamingEntryEvent {
+                        file_id: file_id_stream.clone(),
+                        index: entry.index,
+                        text: entry.text,
+                    });
+                },
+            )
+            .await?;
+
+        let translated_count = translations.len();
+
+        // Apply translations back
+        file.apply_translations(translations);
+
+        let progress = TranslationProgress {
+            total_entries: total,
+            translated_entries: translated_count,
+            last_translated_index: if translated_count > 0 { translated_count - 1 } else { 0 },
+            is_partial: translated_count < total,
+            can_continue: translated_count < total,
+        };
+
+        // Emit final progress
+        let _ = app.emit("translation:progress", ProgressEvent {
+            file_id: file_id.clone(),
+            progress: 100.0,
+            translated: translated_count,
+            total,
+        });
+
+        return Ok(SubtitleTranslationResult {
+            file,
+            progress,
+            error_message: None,
+        });
+    }
+
+    // Default batch mode
     let file_id_progress = file_id.clone();
     let file_id_retry = file_id.clone();
     let file_id_error = file_id.clone();
     let app_progress = app.clone();
     let app_retry = app.clone();
 
-    // Traduz com batching
+    // Translate with batching
     let TranslationBatchReport {
         translations,
         progress,
@@ -249,7 +311,7 @@ async fn translate_subtitle_full(
         )
         .await?;
 
-    // Aplica traduções de volta
+    // Apply translations back
     file.apply_translations(translations);
 
     Ok(SubtitleTranslationResult {
@@ -447,6 +509,8 @@ struct AppSettings {
     max_retries: usize,
     #[serde(default = "default_concurrency")]
     concurrency: usize,
+    #[serde(default)]
+    streaming: bool,
 
     // Saída
     #[serde(default = "default_output_mode")]
@@ -484,6 +548,7 @@ impl Default for AppSettings {
             continue_on_error: default_continue_on_error(),
             max_retries: default_max_retries(),
             concurrency: default_concurrency(),
+            streaming: false,
             output_mode: default_output_mode(),
             mux_language: default_mux_language(),
             mux_title: default_mux_title(),
@@ -544,8 +609,39 @@ fn get_settings_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, Strin
     Ok(app_data_dir.join("settings.json"))
 }
 
+/// Migra configurações do diretório antigo (com.translator.app) para o novo (com.translator)
+fn migrate_old_settings(app: &tauri::AppHandle) {
+    let current_dir = match app.path().app_data_dir() {
+        Ok(dir) => dir,
+        Err(_) => return,
+    };
+
+    // Tenta encontrar o diretório antigo
+    if let Some(parent) = current_dir.parent() {
+        let old_dir = parent.join("com.translator.app");
+        if old_dir.exists() && old_dir != current_dir {
+            // Migra settings.json
+            let old_settings = old_dir.join("settings.json");
+            let new_settings = current_dir.join("settings.json");
+            if old_settings.exists() && !new_settings.exists() {
+                let _ = fs::copy(&old_settings, &new_settings);
+            }
+
+            // Migra templates.json
+            let old_templates = old_dir.join("templates.json");
+            let new_templates = current_dir.join("templates.json");
+            if old_templates.exists() && !new_templates.exists() {
+                let _ = fs::copy(&old_templates, &new_templates);
+            }
+        }
+    }
+}
+
 #[tauri::command]
 async fn load_settings(app: tauri::AppHandle) -> Result<AppSettings, String> {
+    // Tenta migrar configurações antigas na primeira execução
+    migrate_old_settings(&app);
+
     let path = get_settings_path(&app)?;
 
     if !path.exists() {
@@ -827,6 +923,43 @@ struct FileInfo {
 // App Entry Point
 // ============================================================================
 
+/// Retorna o caminho da pasta de dados do app
+#[tauri::command]
+fn get_app_data_dir(app: tauri::AppHandle) -> Result<String, String> {
+    let path = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+/// Abre uma pasta no explorador de arquivos
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -866,6 +999,8 @@ pub fn run() {
             delete_files,
             backup_file,
             replace_file,
+            get_app_data_dir,
+            open_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

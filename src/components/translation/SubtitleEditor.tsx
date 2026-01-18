@@ -4,6 +4,9 @@ import { SubtitleLine } from './SubtitleLine';
 import { useTranslationStore } from '../../stores/translationStore';
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
+// Debounce delay for scroll updates (in milliseconds)
+const SCROLL_DEBOUNCE_MS = 150;
+
 interface Props {
   file: QueueFile;
 }
@@ -20,11 +23,12 @@ function SubtitleEditorBase({ file }: Props) {
     translatedRef.current = translated;
   }, [translated]);
 
+  const translatedCount = file.translatedLines;
   const progress = useMemo(() => (
     entries.length > 0
-      ? Math.round((translated.length / entries.length) * 100)
+      ? Math.round((translatedCount / entries.length) * 100)
       : 0
-  ), [entries.length, translated.length]);
+  ), [entries.length, translatedCount]);
 
   const handleTranslationChange = useCallback((index: number, newText: string) => {
     const current = translatedRef.current;
@@ -35,13 +39,27 @@ function SubtitleEditorBase({ file }: Props) {
     updateFile(file.id, { translatedEntries: newTranslated });
   }, [file.id, updateFile]);
 
-  // Auto-scroll to current translation
+  // Auto-scroll to current translation com debounce para evitar lag
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (scrollRef.current && translated.length > 0) {
-      const lastItem = scrollRef.current.querySelector(`[data-index="${translated.length - 1}"]`);
-      lastItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (scrollRef.current && translatedCount > 0) {
+      // Cancela scroll anterior pendente
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      // Debounce scroll to batch rapid updates
+      scrollTimeoutRef.current = setTimeout(() => {
+        const lastIndex = Math.min(translatedCount - 1, entries.length - 1);
+        const lastItem = scrollRef.current?.querySelector(`[data-index="${lastIndex}"]`);
+        lastItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, SCROLL_DEBOUNCE_MS);
     }
-  }, [translated.length]);
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [entries.length, translatedCount]);
 
   return (
     <Card className="p-4 h-[600px] flex flex-col">
@@ -87,5 +105,6 @@ export const SubtitleEditor = memo(SubtitleEditorBase, (prev, next) => (
   prev.file.id === next.file.id &&
   prev.file.name === next.file.name &&
   prev.file.originalSubtitle === next.file.originalSubtitle &&
-  prev.file.translatedEntries === next.file.translatedEntries
+  prev.file.translatedEntries === next.file.translatedEntries &&
+  prev.file.translatedLines === next.file.translatedLines
 ));

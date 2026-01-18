@@ -1,9 +1,10 @@
 use futures::future::join_all;
+use futures::StreamExt;
 use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Formato da API LLM
+/// LLM API format
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ApiFormat {
@@ -16,7 +17,7 @@ pub enum ApiFormat {
     Auto,
 }
 
-/// Configuração do cliente LLM
+/// LLM client configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LlmConfig {
@@ -95,12 +96,15 @@ pub struct TranslationSettings {
     #[serde(default)]
     pub continue_on_error: bool,
     pub max_retries: usize,
+    #[serde(default)]
+    pub streaming: bool,
 }
 
 fn default_parallel_requests() -> usize {
     1
 }
 
+/// Removes <think>...</think> blocks from LLM responses
 fn strip_think_blocks(input: &str) -> String {
     let mut output = input.to_string();
     loop {
@@ -125,6 +129,7 @@ impl Default for TranslationSettings {
             auto_continue: true,
             continue_on_error: false,
             max_retries: 3,
+            streaming: false,
         }
     }
 }
@@ -260,7 +265,52 @@ struct AnthropicContent {
     text: String,
 }
 
-/// Cliente para comunicação com a API LLM
+// Streaming response structs (OpenAI SSE format)
+#[derive(Debug, Deserialize)]
+struct StreamChoice {
+    delta: StreamDelta,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamDelta {
+    #[serde(default)]
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamChunk {
+    choices: Vec<StreamChoice>,
+}
+
+/// Event emitted when a single entry is translated (for streaming mode)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslatedEntryEvent {
+    pub index: usize,
+    pub text: String,
+}
+
+/// Placeholder for newlines in subtitle text during translation
+const NEWLINE_PLACEHOLDER: &str = "<<NEWLINE>>";
+
+/// Parses a translation line in the format "INDEX|TEXT" and returns (index, translated_text)
+fn parse_translation_line(line: &str, placeholder: &str) -> Option<(usize, String)> {
+    if line.is_empty() || line.starts_with("```") {
+        return None;
+    }
+
+    let sep_pos = line.find('|')?;
+    let idx_str = &line[..sep_pos];
+    let idx = idx_str.trim().parse::<usize>().ok()?;
+    let text = line[sep_pos + 1..]
+        .replace(placeholder, "\n")
+        .replace("\\N", "\n")
+        .replace("\\n", "\n");
+
+    Some((idx, text))
+}
+
+/// LLM API client
 pub struct LlmClient {
     client: Client,
     config: LlmConfig,
@@ -528,6 +578,193 @@ impl LlmClient {
             .first()
             .map(|c| c.text.clone())
             .ok_or_else(|| "No response from model".to_string())
+    }
+
+    /// Translates subtitles with streaming (OpenAI format only)
+    /// Emits events as each entry is translated
+    /// Uses batching to process in smaller groups
+    pub async fn translate_subtitles_streaming(
+        &self,
+        system_prompt: &str,
+        entries: &[(usize, String)],
+        batch_size: usize,
+        max_retries: usize,
+        mut on_entry: impl FnMut(TranslatedEntryEvent),
+    ) -> Result<Vec<(usize, String)>, String> {
+        // Create map of original indices for ASS tag validation (using references to avoid cloning)
+        let original_map: HashMap<usize, &str> = entries.iter().map(|(i, s)| (*i, s.as_str())).collect();
+        let mut all_results = Vec::new();
+
+        // Process in batches
+        for batch in entries.chunks(batch_size) {
+            let formatted: String = batch
+                .iter()
+                .map(|(idx, text)| {
+                    let normalized = text
+                        .replace("\\N", NEWLINE_PLACEHOLDER)
+                        .replace("\\n", NEWLINE_PLACEHOLDER)
+                        .replace('\n', NEWLINE_PLACEHOLDER);
+                    format!("{}|{}", idx, normalized)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let instruction = format!(
+                r#"{}
+
+---
+CRITICAL FORMAT INSTRUCTIONS:
+1. Return translations in EXACTLY this format: INDEX|TRANSLATED_TEXT
+2. Each subtitle must be on its own line: number|translated text
+3. The marker {} represents a LINE BREAK within a subtitle. You MUST preserve it exactly as-is in your translation.
+   Example input:  5|It's a special event{}that everyone attends
+   Example output: 5|É um evento especial{}que todos participam
+4. Do NOT remove, split, or modify {} markers - they indicate where line breaks occur in the subtitle display."#,
+                system_prompt, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER
+            );
+
+            let full_content = format!("{}\n\n{}", instruction, formatted);
+
+            let messages = vec![ChatMessage {
+                role: "user".to_string(),
+                content: full_content,
+            }];
+
+            let request = ChatRequest {
+                model: self.config.model.clone(),
+                messages,
+                stream: Some(true),
+            };
+
+            // Retry loop for streaming batch
+            let mut attempt = 0;
+            let batch_results = loop {
+                attempt += 1;
+
+                let response = self
+                    .apply_headers(
+                        self.client
+                            .post(&self.config.endpoint)
+                            .header("Content-Type", "application/json"),
+                    )
+                    .json(&request)
+                    .send()
+                    .await;
+
+                let response = match response {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if attempt > max_retries {
+                            return Err(format!("Translation request failed: {}", e));
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                };
+
+                if !response.status().is_success() {
+                    let status = response.status();
+                    let body = response.text().await.unwrap_or_default();
+                    if attempt > max_retries {
+                        return Err(format!("Translation API error {}: {}", status, body));
+                    }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    continue;
+                }
+
+                let mut current_text = String::new();
+                let mut buffer = String::new();
+                let mut batch_results = Vec::new();
+
+                let mut stream = response.bytes_stream();
+
+                while let Some(chunk_result) = stream.next().await {
+                    let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
+                    let chunk_str = String::from_utf8_lossy(&chunk);
+                    buffer.push_str(&chunk_str);
+
+                    // Process complete SSE lines
+                    while let Some(newline_pos) = buffer.find('\n') {
+                        let line = buffer[..newline_pos].trim().to_string();
+                        buffer = buffer[newline_pos + 1..].to_string();
+
+                        if line.is_empty() || line == "data: [DONE]" {
+                            continue;
+                        }
+
+                        if let Some(json_str) = line.strip_prefix("data: ") {
+                            match serde_json::from_str::<StreamChunk>(json_str) {
+                                Ok(chunk) => {
+                                    for choice in chunk.choices {
+                                        if let Some(content) = choice.delta.content {
+                                            // Process received content character by character
+                                            for ch in content.chars() {
+                                                if ch == '\n' {
+                                                    // End of a line - try to parse
+                                                    let line_content = current_text.trim().to_string();
+                                                    if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
+                                                        // Validate ASS tag compatibility
+                                                        let should_emit = original_map
+                                                            .get(&idx)
+                                                            .map(|orig| Self::tags_compatible(orig, &text))
+                                                            .unwrap_or(true);
+
+                                                        if should_emit {
+                                                            on_entry(TranslatedEntryEvent {
+                                                                index: idx,
+                                                                text: text.clone(),
+                                                            });
+                                                            batch_results.push((idx, text));
+                                                        }
+                                                    }
+                                                    current_text.clear();
+                                                } else {
+                                                    current_text.push(ch);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    // Log invalid JSON chunks in debug mode for troubleshooting
+                                    #[cfg(debug_assertions)]
+                                    eprintln!("Failed to parse SSE chunk: {} - JSON: {}", e, json_str);
+                                    let _ = e; // Suppress unused warning in release
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Process last line of the batch if any
+                let line_content = current_text.trim().to_string();
+                if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
+                    let should_emit = original_map
+                        .get(&idx)
+                        .map(|orig| Self::tags_compatible(orig, &text))
+                        .unwrap_or(true);
+
+                    if should_emit {
+                        on_entry(TranslatedEntryEvent {
+                            index: idx,
+                            text: text.clone(),
+                        });
+                        batch_results.push((idx, text));
+                    }
+                }
+
+                break batch_results;
+            };
+
+            all_results.extend(batch_results);
+        }
+
+        if all_results.is_empty() {
+            return Err("Failed to parse streaming translation response".to_string());
+        }
+
+        all_results.sort_by_key(|(idx, _)| *idx);
+        Ok(all_results)
     }
 
     /// Traduz legendas em batch, preservando a estrutura

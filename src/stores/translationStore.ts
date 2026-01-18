@@ -6,6 +6,23 @@ import * as TauriUtils from '../utils/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { useEffect } from 'react';
 
+// Debounce timing constant for progress updates (in milliseconds)
+const PROGRESS_FLUSH_DELAY_MS = 50;
+
+// Module-level map to track translated indices per file (for streaming mode)
+// This is kept outside the hook to persist across re-renders but allow cleanup on file removal
+const translatedIndicesMap = new Map<string, Set<number>>();
+
+/** Clears translated indices for a specific file ID */
+export function clearTranslatedIndices(fileId: string) {
+  translatedIndicesMap.delete(fileId);
+}
+
+/** Clears all translated indices (used when clearing the queue) */
+export function clearAllTranslatedIndices() {
+  translatedIndicesMap.clear();
+}
+
 interface TranslationState {
   queue: QueueFile[];
   currentFileId: string | null;
@@ -68,10 +85,12 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
   },
 
   removeFile: (id) => {
+    clearTranslatedIndices(id);
     set((state) => ({ queue: state.queue.filter((f) => f.id !== id) }));
   },
 
   clearQueue: () => {
+    clearAllTranslatedIndices();
     set({ queue: [], currentFileId: null });
   },
 
@@ -277,6 +296,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
           autoContinue: settings.autoContinue,
           continueOnError: settings.continueOnError,
           maxRetries: settings.maxRetries,
+          streaming: settings.streaming,
         }
       );
 
@@ -344,13 +364,18 @@ export function useTranslationEvents() {
   useEffect(() => {
     let unlistenProgress: (() => void) | null = null;
     let unlistenError: (() => void) | null = null;
+    let unlistenEntry: (() => void) | null = null;
     const pendingProgress = new Map<string, { progress: number; translated: number; total: number }>();
+    // Map of pending entries for update (fileId -> index -> text)
+    const pendingEntries = new Map<string, Map<number, string>>();
     let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const flushProgress = () => {
       flushTimeout = null;
-      if (pendingProgress.size === 0) return;
+
       const updates: Record<string, Partial<QueueFile>> = {};
+
+      // Process progress updates (batch mode)
       for (const [fileId, payload] of pendingProgress.entries()) {
         updates[fileId] = {
           progress: payload.progress,
@@ -359,12 +384,58 @@ export function useTranslationEvents() {
         };
       }
       pendingProgress.clear();
-      useTranslationStore.getState().bulkUpdateFiles(updates);
+
+      // Process streaming entry updates
+      for (const [fileId, entries] of pendingEntries.entries()) {
+        const store = useTranslationStore.getState();
+        const file = store.queue.find(f => f.id === fileId);
+        if (file && file.originalSubtitle) {
+          // Initialize the translated indices set if it doesn't exist
+          if (!translatedIndicesMap.has(fileId)) {
+            translatedIndicesMap.set(fileId, new Set());
+          }
+          const indices = translatedIndicesMap.get(fileId)!;
+          const originalEntries = file.originalSubtitle.entries;
+
+          // Create index -> position map for O(1) lookup
+          const indexToPosition = new Map<number, number>();
+          for (let i = 0; i < originalEntries.length; i++) {
+            indexToPosition.set(originalEntries[i].index, i);
+          }
+
+          // Update translated entries
+          const currentTranslated = file.translatedEntries ? [...file.translatedEntries] : [];
+          for (const [index, text] of entries) {
+            const entryIndex = indexToPosition.get(index);
+            if (entryIndex === undefined) continue;
+
+            const baseEntry = currentTranslated[entryIndex] ?? originalEntries[entryIndex];
+            currentTranslated[entryIndex] = { ...baseEntry, text };
+            indices.add(index);
+          }
+
+          const total = file.totalLines || originalEntries.length;
+          const translatedCount = indices.size;
+          const progressPercent = total > 0 ? (translatedCount / total) * 100 : 0;
+
+          updates[fileId] = {
+            ...updates[fileId],
+            translatedEntries: currentTranslated,
+            translatedLines: translatedCount,
+            progress: progressPercent,
+          };
+        }
+      }
+      pendingEntries.clear();
+
+      if (Object.keys(updates).length > 0) {
+        useTranslationStore.getState().bulkUpdateFiles(updates);
+      }
     };
 
     const scheduleFlush = () => {
       if (flushTimeout !== null) return;
-      flushTimeout = setTimeout(flushProgress, 100);
+      flushTimeout = setTimeout(flushProgress, PROGRESS_FLUSH_DELAY_MS);
     };
 
     const setupListeners = async () => {
@@ -374,6 +445,10 @@ export function useTranslationEvents() {
           (event) => {
             const { fileId, progress, translated, total } = event.payload;
             pendingProgress.set(fileId, { progress, translated, total });
+            // Clear translated indices when a new file starts or progress is reset
+            if (translated === 0) {
+              translatedIndicesMap.delete(fileId);
+            }
             scheduleFlush();
           }
         );
@@ -383,8 +458,21 @@ export function useTranslationEvents() {
           (event) => {
             const { fileId, error, retryCount } = event.payload;
             const file = useTranslationStore.getState().queue.find(f => f.id === fileId);
-            const fileName = file?.name || 'arquivo';
-            useLogsStore.getState().addLog('warning', `Erro em ${fileName} (tentativa ${retryCount}): ${error}`, fileName);
+            const fileName = file?.name || 'file';
+            useLogsStore.getState().addLog('warning', `Error in ${fileName} (attempt ${retryCount}): ${error}`, fileName);
+          }
+        );
+
+        // Listener for streaming individual entries
+        unlistenEntry = await listen<{ fileId: string; index: number; text: string }>(
+          'translation:entry',
+          (event) => {
+            const { fileId, index, text } = event.payload;
+            if (!pendingEntries.has(fileId)) {
+              pendingEntries.set(fileId, new Map());
+            }
+            pendingEntries.get(fileId)!.set(index, text);
+            scheduleFlush();
           }
         );
       } catch (error) {
@@ -400,6 +488,9 @@ export function useTranslationEvents() {
       }
       unlistenProgress?.();
       unlistenError?.();
+      unlistenEntry?.();
+      // Note: We don't clear translatedIndicesMap here since it's managed at module level
+      // and cleaned up when files are removed from the queue
     };
   }, []);
 }

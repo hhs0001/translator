@@ -15,6 +15,10 @@ const BATCH_PRESETS = [
 export function TranslationSettings() {
   const { settings, updateSetting } = useSettingsStore();
 
+  // Streaming is only supported with OpenAI-compatible APIs (not direct Anthropic)
+  const isAnthropicDirect = settings.apiFormat === 'anthropic';
+  const streamingDisabled = isAnthropicDirect;
+
   const handleBatchSelect = (value: string) => {
     if (value) {
       const parsed = Number(value);
@@ -112,6 +116,23 @@ export function TranslationSettings() {
         </div>
 
         <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="streaming"
+              checked={settings.streaming && !streamingDisabled}
+              onCheckedChange={(checked) => updateSetting('streaming', checked)}
+              disabled={streamingDisabled}
+            />
+            <Label htmlFor="streaming" className={streamingDisabled ? 'text-muted-foreground' : ''}>
+              Streaming (exibir traduções conforme chegam)
+            </Label>
+          </div>
+          <p className="text-xs text-muted-foreground ml-10">
+            {streamingDisabled
+              ? 'Streaming não é suportado com a API Anthropic direta. Use uma API compatível com OpenAI.'
+              : 'Quando habilitado, as traduções aparecem em tempo real conforme a API responde.'}
+          </p>
+
           <div className="flex items-center gap-2">
             <Switch
               id="auto-continue"
