@@ -380,19 +380,24 @@ export function useTranslationEvents() {
           const indices = translatedIndices.get(fileId)!;
           const originalEntries = file.originalSubtitle.entries;
 
-          // Atualiza as entradas traduzidas sem pré-preencher com texto original
+          // Cria mapa de índice -> posição para lookup O(1)
+          const indexToPosition = new Map<number, number>();
+          for (let i = 0; i < originalEntries.length; i++) {
+            indexToPosition.set(originalEntries[i].index, i);
+          }
+
+          // Atualiza as entradas traduzidas
           const currentTranslated = file.translatedEntries ? [...file.translatedEntries] : [];
           for (const [index, text] of entries) {
-            const entryIndex = originalEntries.findIndex(e => e.index === index);
-            if (entryIndex === -1) continue;
+            const entryIndex = indexToPosition.get(index);
+            if (entryIndex === undefined) continue;
 
             const baseEntry = currentTranslated[entryIndex] ?? originalEntries[entryIndex];
             currentTranslated[entryIndex] = { ...baseEntry, text };
-            // Adiciona ao set de índices traduzidos
             indices.add(index);
           }
 
-          const total = file.totalLines || file.originalSubtitle.entries.length;
+          const total = file.totalLines || originalEntries.length;
           const translatedCount = indices.size;
           const progressPercent = total > 0 ? (translatedCount / total) * 100 : 0;
 

@@ -146,3 +146,11 @@ export async function detectLanguage(
     translationPrompt,
   });
 }
+
+export async function getAppDataDir(): Promise<string> {
+  return invoke<string>('get_app_data_dir');
+}
+
+export async function openFolder(path: string): Promise<void> {
+  return invoke('open_folder', { path });
+}

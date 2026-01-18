@@ -36,13 +36,26 @@ function SubtitleEditorBase({ file }: Props) {
     updateFile(file.id, { translatedEntries: newTranslated });
   }, [file.id, updateFile]);
 
-  // Auto-scroll to current translation
+  // Auto-scroll to current translation com debounce para evitar lag
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (scrollRef.current && translatedCount > 0) {
-      const lastIndex = Math.min(translatedCount - 1, entries.length - 1);
-      const lastItem = scrollRef.current.querySelector(`[data-index="${lastIndex}"]`);
-      lastItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Cancela scroll anterior pendente
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      // Debounce de 150ms para agrupar updates rápidos
+      scrollTimeoutRef.current = setTimeout(() => {
+        const lastIndex = Math.min(translatedCount - 1, entries.length - 1);
+        const lastItem = scrollRef.current?.querySelector(`[data-index="${lastIndex}"]`);
+        lastItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 150);
     }
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
   }, [entries.length, translatedCount]);
 
   return (

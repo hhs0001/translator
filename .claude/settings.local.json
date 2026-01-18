@@ -1,14 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:v3.heroui.com)",
       "Bash(cargo check:*)",
       "Bash(bun tsc:*)",
       "Bash(bun run build)",
       "Bash(bun run tsc:*)",
       "Bash(tree:*)",
       "WebFetch(domain:docs.anthropic.com)",
-      "WebFetch(domain:openrouter.ai)"
+      "WebFetch(domain:openrouter.ai)",
+      "Bash(git show:*)"
     ]
   }
 }

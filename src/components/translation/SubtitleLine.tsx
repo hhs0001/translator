@@ -9,14 +9,14 @@ interface Props {
   onTranslationChange: (index: number, text: string) => void;
 }
 
-export const SubtitleLine = memo(function SubtitleLine({ index, original, translated, onTranslationChange }: Props) {
+function SubtitleLineBase({ index, original, translated, onTranslationChange }: Props) {
   const isTranslated = !!translated;
 
   return (
     <div
       data-index={index}
       className={`
-        grid grid-cols-2 gap-2 p-2 rounded-lg transition-colors
+        grid grid-cols-2 gap-2 p-2 rounded-lg
         ${isTranslated ? 'bg-emerald-500/10' : 'bg-muted/50'}
       `}
     >
@@ -41,4 +41,21 @@ export const SubtitleLine = memo(function SubtitleLine({ index, original, transl
       </div>
     </div>
   );
+}
+
+export const SubtitleLine = memo(SubtitleLineBase, (prev, next) => {
+  // Comparação profunda para evitar re-renders desnecessários
+  if (prev.index !== next.index) return false;
+  if (prev.original.text !== next.original.text) return false;
+  if (prev.original.start_time !== next.original.start_time) return false;
+  if (prev.original.end_time !== next.original.end_time) return false;
+
+  // Comparar translated
+  const prevTranslated = prev.translated;
+  const nextTranslated = next.translated;
+  if (!prevTranslated && !nextTranslated) return true;
+  if (!prevTranslated || !nextTranslated) return false;
+  if (prevTranslated.text !== nextTranslated.text) return false;
+
+  return true;
 });
