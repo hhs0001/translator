@@ -11,7 +11,7 @@ const LANGUAGE_OPTIONS = [
   { value: 'pt-BR', label: 'Portugues (Brasil)' },
 ] as const;
 
-const SUPPORTED_LANGUAGES = new Set(LANGUAGE_OPTIONS.map((option) => option.value));
+const SUPPORTED_LANGUAGES = new Set<string>(LANGUAGE_OPTIONS.map((option) => option.value));
 
 const normalizeLanguage = (value?: string) => {
   if (!value) {
