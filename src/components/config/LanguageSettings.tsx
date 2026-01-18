@@ -11,9 +11,29 @@ const LANGUAGE_OPTIONS = [
   { value: 'pt-BR', label: 'Portugues (Brasil)' },
 ] as const;
 
+const SUPPORTED_LANGUAGES = new Set(LANGUAGE_OPTIONS.map((option) => option.value));
+
+const normalizeLanguage = (value?: string) => {
+  if (!value) {
+    return LANGUAGE_OPTIONS[0].value;
+  }
+  if (SUPPORTED_LANGUAGES.has(value)) {
+    return value;
+  }
+  const baseLanguage = value.split('-')[0];
+  if (SUPPORTED_LANGUAGES.has(baseLanguage)) {
+    return baseLanguage;
+  }
+  if (baseLanguage === 'pt') {
+    return 'pt-BR';
+  }
+  return LANGUAGE_OPTIONS[0].value;
+};
+
 export function LanguageSettings() {
   const { t, i18n } = useTranslation();
   const { updateSetting } = useSettingsStore();
+  const selectedLanguage = normalizeLanguage(i18n.resolvedLanguage ?? i18n.language);
 
   const handleLanguageChange = async (value: string) => {
     await changeLanguage(value as Language);
@@ -28,7 +48,7 @@ export function LanguageSettings() {
         <div>
           <label className="block text-sm font-medium mb-1">{t('settings.language.label')}</label>
           <Select
-            value={i18n.language}
+            value={selectedLanguage}
             onValueChange={handleLanguageChange}
           >
             <Label className="sr-only">{t('settings.language.label')}</Label>

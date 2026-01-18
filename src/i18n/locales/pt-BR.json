@@ -94,6 +94,7 @@
       "model": "Modelo",
       "searchModels": "Pesquisar modelos",
       "selectModel": "Selecione um modelo",
+      "selectMode": "Selecione o modo",
       "noModelsFound": "Nenhum modelo encontrado",
       "customModel": "Modelo Customizado (opcional)",
       "customModelHint": "Se preenchido, sera usado em vez do modelo selecionado acima",

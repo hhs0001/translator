@@ -94,6 +94,7 @@
       "model": "Model",
       "searchModels": "Search models",
       "selectModel": "Select a model",
+      "selectMode": "Select mode",
       "noModelsFound": "No models found",
       "customModel": "Custom Model (optional)",
       "customModelHint": "If filled, will be used instead of the selected model above",
