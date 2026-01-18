@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -5,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export function PromptEditor() {
+  const { t } = useTranslation();
   const { settings, updateSetting, templates } = useSettingsStore();
 
   const applyTemplate = (value: string) => {
@@ -19,7 +21,7 @@ export function PromptEditor() {
 
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">Prompt de Tradução</h3>
+      <h3 className="text-lg font-semibold mb-4">{t('settings.prompt.title')}</h3>
 
       <div className="space-y-4">
         {templates.length > 0 && (
@@ -30,7 +32,7 @@ export function PromptEditor() {
             >
               <Label className="sr-only">Template</Label>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Aplicar template..." />
+                <SelectValue placeholder={t('settings.prompt.applyTemplate')} />
               </SelectTrigger>
               <SelectContent>
                 {templates.map((template) => (
@@ -47,11 +49,11 @@ export function PromptEditor() {
           value={settings.prompt}
           onChange={(e) => updateSetting('prompt', e.target.value)}
           className="w-full min-h-[150px]"
-          placeholder="Digite o prompt de tradução..."
+          placeholder={t('settings.prompt.placeholder')}
         />
 
         <p className="text-xs text-muted-foreground">
-          Use um prompt claro que instrua o modelo a traduzir as legendas mantendo formatação e contexto.
+          {t('settings.prompt.hint')}
         </p>
       </div>
     </Card>

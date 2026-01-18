@@ -3,6 +3,7 @@
 // ============================================
 
 export type ApiFormat = 'openai' | 'anthropic' | 'auto';
+export type Language = 'en' | 'pt-BR';
 
 export interface AppSettings {
   // API
@@ -34,6 +35,9 @@ export interface AppSettings {
   muxLanguage: string;
   muxTitle: string;
   separateOutputDir: string;
+
+  // Interface language
+  language: Language;
 }
 
 export interface Header {
@@ -63,6 +67,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   muxLanguage: 'por',
   muxTitle: 'Portuguese',
   separateOutputDir: '',
+  language: 'en',
 };
 
 // ============================================

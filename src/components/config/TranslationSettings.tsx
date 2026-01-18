@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -5,14 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { useSettingsStore } from '../../stores/settingsStore';
 
-const BATCH_PRESETS = [
-  { value: 25, label: '25 linhas' },
-  { value: 50, label: '50 linhas' },
-  { value: 100, label: '100 linhas' },
-  { value: 150, label: '150 linhas' },
-];
-
 export function TranslationSettings() {
+  const { t } = useTranslation();
   const { settings, updateSetting } = useSettingsStore();
 
   // Streaming is only supported with OpenAI-compatible APIs (not direct Anthropic)
@@ -35,24 +30,31 @@ export function TranslationSettings() {
     }
   };
 
+  const batchPresets = [
+    { value: 25, label: `25 ${t('settings.translationSettings.lines')}` },
+    { value: 50, label: `50 ${t('settings.translationSettings.lines')}` },
+    { value: 100, label: `100 ${t('settings.translationSettings.lines')}` },
+    { value: 150, label: `150 ${t('settings.translationSettings.lines')}` },
+  ];
+
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">Configurações de Tradução</h3>
+      <h3 className="text-lg font-semibold mb-4">{t('settings.translationSettings.title')}</h3>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Tamanho do Batch</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.translationSettings.batchSize')}</label>
           <div className="flex gap-2">
             <Select
               value={String(settings.batchSize)}
               onValueChange={handleBatchSelect}
             >
-              <Label className="sr-only">Tamanho</Label>
+              <Label className="sr-only">{t('settings.translationSettings.batchSize')}</Label>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Selecione" />
+                <SelectValue placeholder={t('common.select')} />
               </SelectTrigger>
               <SelectContent>
-                {BATCH_PRESETS.map((preset) => (
+                {batchPresets.map((preset) => (
                   <SelectItem key={String(preset.value)} value={String(preset.value)}>
                     {preset.label}
                   </SelectItem>
@@ -69,12 +71,12 @@ export function TranslationSettings() {
             />
           </div>
           <p className="text-xs text-muted-foreground mt-1">
-            Quantidade de linhas enviadas por requisição
+            {t('settings.translationSettings.batchSizeHint')}
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Requisições Paralelas</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.translationSettings.parallelRequests')}</label>
           <Input
             type="number"
             value={String(settings.parallelRequests || 1)}
@@ -84,12 +86,12 @@ export function TranslationSettings() {
             max={10}
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Número de batches enviados em paralelo por arquivo (ex: 4 x 50 linhas = 200 linhas simultâneas)
+            {t('settings.translationSettings.parallelRequestsHint')}
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Concorrência</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.translationSettings.concurrency')}</label>
           <Input
             type="number"
             value={String(settings.concurrency || 1)}
@@ -99,12 +101,12 @@ export function TranslationSettings() {
             max={10}
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Número de arquivos processados simultaneamente
+            {t('settings.translationSettings.concurrencyHint')}
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Máximo de Retentativas</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.translationSettings.maxRetries')}</label>
           <Input
             type="number"
             value={String(settings.maxRetries || 3)}
@@ -124,13 +126,13 @@ export function TranslationSettings() {
               disabled={streamingDisabled}
             />
             <Label htmlFor="streaming" className={streamingDisabled ? 'text-muted-foreground' : ''}>
-              Streaming (exibir traduções conforme chegam)
+              {t('settings.translationSettings.streaming')}
             </Label>
           </div>
           <p className="text-xs text-muted-foreground ml-10">
             {streamingDisabled
-              ? 'Streaming não é suportado com a API Anthropic direta. Use uma API compatível com OpenAI.'
-              : 'Quando habilitado, as traduções aparecem em tempo real conforme a API responde.'}
+              ? t('settings.translationSettings.streamingDisabled')
+              : t('settings.translationSettings.streamingHint')}
           </p>
 
           <div className="flex items-center gap-2">
@@ -139,7 +141,7 @@ export function TranslationSettings() {
               checked={settings.autoContinue}
               onCheckedChange={(checked) => updateSetting('autoContinue', checked)}
             />
-            <Label htmlFor="auto-continue">Continuar automaticamente (respostas parciais)</Label>
+            <Label htmlFor="auto-continue">{t('settings.translationSettings.autoContinue')}</Label>
           </div>
 
           <div className="flex items-center gap-2">
@@ -148,7 +150,7 @@ export function TranslationSettings() {
               checked={settings.continueOnError}
               onCheckedChange={(checked) => updateSetting('continueOnError', checked)}
             />
-            <Label htmlFor="continue-on-error">Continuar fila em caso de erro</Label>
+            <Label htmlFor="continue-on-error">{t('settings.translationSettings.continueOnError')}</Label>
           </div>
         </div>
       </div>

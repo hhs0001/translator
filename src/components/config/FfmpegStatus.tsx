@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export function FfmpegStatus() {
+  const { t } = useTranslation();
   const { ffmpegInstalled, checkFfmpeg } = useSettingsStore();
   const [isChecking, setIsChecking] = useState(false);
 
@@ -17,11 +19,11 @@ export function FfmpegStatus() {
 
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">FFmpeg</h3>
+      <h3 className="text-lg font-semibold mb-4">{t('settings.ffmpeg.title')}</h3>
 
       <div className="flex items-center gap-4">
         <Button onClick={handleCheck} disabled={isChecking}>
-          {isChecking ? 'Verificando...' : 'Verificar FFmpeg'}
+          {isChecking ? t('settings.ffmpeg.checking') : t('settings.ffmpeg.check')}
         </Button>
 
         {ffmpegInstalled !== null && (
@@ -33,17 +35,16 @@ export function FfmpegStatus() {
                 : 'border-transparent bg-destructive/15 text-destructive'
             }
           >
-            {ffmpegInstalled ? 'Instalado' : 'Não encontrado'}
+            {ffmpegInstalled ? t('settings.ffmpeg.installed') : t('settings.ffmpeg.notFound')}
           </Badge>
         )}
       </div>
 
       {ffmpegInstalled === false && (
         <Alert variant="destructive" className="mt-4">
-          <AlertTitle>FFmpeg não encontrado</AlertTitle>
+          <AlertTitle>{t('settings.ffmpeg.notFoundTitle')}</AlertTitle>
           <AlertDescription>
-            O FFmpeg é necessário para extrair legendas de vídeos.
-            Instale-o e adicione ao PATH do sistema.
+            {t('settings.ffmpeg.notFoundDescription')}
           </AlertDescription>
         </Alert>
       )}
@@ -71,11 +72,11 @@ export function FfmpegStatus() {
           variant="outline"
           className="border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300"
         >
-          VTT (em breve)
+          VTT ({t('settings.ffmpeg.comingSoon')})
         </Badge>
       </div>
       <p className="text-xs text-muted-foreground mt-2">
-        ASS/SSA preservam melhor estilos e formatação
+        {t('settings.ffmpeg.formatsHint')}
       </p>
     </Card>
   );

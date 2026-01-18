@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -5,13 +7,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FileQueueItem } from './FileQueueItem';
 import { useTranslationStore } from '../../stores/translationStore';
 import { useShallow } from 'zustand/shallow';
-import { useMemo } from 'react';
 
 interface Props {
   maxVisible?: number;
 }
 
 export function FileQueue({ maxVisible }: Props) {
+  const { t } = useTranslation();
   const { queue, clearQueue, setAllVideoTracks } = useTranslationStore(
     useShallow((s) => ({
       queue: s.queue,
@@ -29,14 +31,14 @@ export function FileQueue({ maxVisible }: Props) {
     [queue.length, maxVisible]
   );
 
-  // Encontrar vídeos com faixas disponíveis
+  // Find videos with available tracks
   const videosWithTracks = useMemo(
     () => queue.filter((f) => f.type === 'video' && f.subtitleTracks && f.subtitleTracks.length > 0),
     [queue]
   );
   const hasMultipleVideos = videosWithTracks.length > 1;
-  
-  // Pegar o máximo de faixas disponíveis entre todos os vídeos
+
+  // Get the maximum number of tracks available among all videos
   const maxTracks = useMemo(
     () => Math.max(...videosWithTracks.map((f) => f.subtitleTracks?.length ?? 0), 0),
     [videosWithTracks]
@@ -56,23 +58,25 @@ export function FileQueue({ maxVisible }: Props) {
     return null;
   }
 
+  const fileLabel = queue.length === 1 ? t('translation.queue.file') : t('translation.queue.files');
+
   return (
     <Card className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">
-          Fila ({queue.length} {queue.length === 1 ? 'arquivo' : 'arquivos'})
+          {t('translation.queue.title')} ({queue.length} {fileLabel})
         </h3>
         <div className="flex items-center gap-2">
           {hasMultipleVideos && maxTracks > 0 && (
             <Select onValueChange={handleQuickSelect}>
-              <Label className="sr-only">Faixa para todos os vídeos</Label>
+              <Label className="sr-only">{t('translation.queue.applyTrackAll')}</Label>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Aplicar faixa em todos" />
+                <SelectValue placeholder={t('translation.queue.applyTrackAll')} />
               </SelectTrigger>
               <SelectContent>
                 {trackOptions.map((trackIndex) => (
                   <SelectItem key={trackIndex} value={String(trackIndex)}>
-                    Faixa {trackIndex + 1} em todos
+                    {t('translation.queue.trackForAll', { index: trackIndex + 1 })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -84,7 +88,7 @@ export function FileQueue({ maxVisible }: Props) {
             className="border-destructive/30 text-destructive hover:bg-destructive/10"
             onClick={clearQueue}
           >
-            Limpar
+            {t('common.clear')}
           </Button>
         </div>
       </div>
@@ -96,7 +100,7 @@ export function FileQueue({ maxVisible }: Props) {
 
         {hiddenCount > 0 && (
           <p className="text-center text-sm text-muted-foreground py-2">
-            +{hiddenCount} arquivo(s) na fila
+            {t('translation.queue.moreFiles', { count: hiddenCount })}
           </p>
         )}
       </div>

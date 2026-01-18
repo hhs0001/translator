@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileDropZone } from './FileDropZone';
 import { FileQueue } from './FileQueue';
@@ -6,6 +7,7 @@ import { useTranslationStore } from '../../stores/translationStore';
 import { useShallow } from 'zustand/shallow';
 
 export function TranslationPage() {
+  const { t } = useTranslation();
   const { queue, currentFileId } = useTranslationStore(
     useShallow((s) => ({ queue: s.queue, currentFileId: s.currentFileId }))
   );
@@ -14,9 +16,9 @@ export function TranslationPage() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="single" className="w-full">
-        <TabsList aria-label="Modo de tradução">
-          <TabsTrigger value="single">Single</TabsTrigger>
-          <TabsTrigger value="batch">Batch</TabsTrigger>
+        <TabsList aria-label={t('translation.mode.single')}>
+          <TabsTrigger value="single">{t('translation.mode.single')}</TabsTrigger>
+          <TabsTrigger value="batch">{t('translation.mode.batch')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="single" className="pt-4">

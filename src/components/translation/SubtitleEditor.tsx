@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Card } from '@/components/ui/card';
 import { QueueFile } from '../../types';
 import { SubtitleLine } from './SubtitleLine';
@@ -12,6 +13,7 @@ interface Props {
 }
 
 function SubtitleEditorBase({ file }: Props) {
+  const { t } = useTranslation();
   const updateFile = useTranslationStore((s) => s.updateFile);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -39,11 +41,11 @@ function SubtitleEditorBase({ file }: Props) {
     updateFile(file.id, { translatedEntries: newTranslated });
   }, [file.id, updateFile]);
 
-  // Auto-scroll to current translation com debounce para evitar lag
+  // Auto-scroll to current translation with debounce to avoid lag
   const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (scrollRef.current && translatedCount > 0) {
-      // Cancela scroll anterior pendente
+      // Cancel pending scroll
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
@@ -67,7 +69,7 @@ function SubtitleEditorBase({ file }: Props) {
         <div>
           <h3 className="font-semibold">{file.name}</h3>
           <p className="text-sm text-muted-foreground">
-            {file.originalSubtitle?.format.toUpperCase()} • {entries.length} linhas
+            {file.originalSubtitle?.format.toUpperCase()} • {entries.length} {t('translation.editor.lines')}
           </p>
         </div>
         <div className="text-right">
@@ -82,8 +84,8 @@ function SubtitleEditorBase({ file }: Props) {
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-xs font-medium text-muted-foreground px-2 mb-2">
-        <div>Original</div>
-        <div>Tradução</div>
+        <div>{t('translation.editor.original')}</div>
+        <div>{t('translation.editor.translated')}</div>
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-1">

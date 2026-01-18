@@ -1,0 +1,178 @@
+{
+  "common": {
+    "save": "Salvar",
+    "saving": "Salvando...",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "deleting": "Excluindo...",
+    "edit": "Editar",
+    "clear": "Limpar",
+    "select": "Selecionar",
+    "loading": "Carregando...",
+    "or": "ou",
+    "name": "Nome",
+    "file": "Arquivo",
+    "files": "arquivos",
+    "lines": "linhas"
+  },
+  "navbar": {
+    "title": "SubTranslator",
+    "translation": "Traduzir",
+    "settings": "Configurar",
+    "logs": "Logs",
+    "translate": "Traduzir",
+    "pause": "Pausar",
+    "resume": "Retomar",
+    "inQueue": "na fila"
+  },
+  "logs": {
+    "title": "Logs",
+    "filter": {
+      "all": "Todos",
+      "info": "Info",
+      "success": "Sucesso",
+      "warning": "Warning",
+      "error": "Erro"
+    },
+    "empty": "Nenhum log encontrado",
+    "showMore": "Mostrar mais ({{count}})",
+    "showLess": "Mostrar menos"
+  },
+  "translation": {
+    "dropzone": {
+      "title": "Arraste arquivos aqui",
+      "subtitle": "Suporta: SRT, ASS, SSA, MKV, MP4, AVI",
+      "selectFiles": "Selecionar arquivos"
+    },
+    "queue": {
+      "title": "Fila",
+      "file": "arquivo",
+      "files": "arquivos",
+      "moreFiles": "+{{count}} arquivo(s) na fila",
+      "applyTrackAll": "Aplicar faixa em todos",
+      "trackForAll": "Faixa {{index}} em todos"
+    },
+    "status": {
+      "pending": "Pendente",
+      "extracting": "Extraindo",
+      "translating": "Traduzindo",
+      "detecting_language": "Detectando Idioma",
+      "saving": "Salvando",
+      "muxing": "Muxando",
+      "paused": "Pausado",
+      "completed": "Concluido",
+      "error": "Erro"
+    },
+    "video": {
+      "detectingTracks": "Detectando faixas...",
+      "noTracksFound": "Nenhuma faixa de legenda encontrada",
+      "track": "Faixa {{index}}",
+      "subtitleTrack": "Faixa de legenda"
+    },
+    "editor": {
+      "original": "Original",
+      "translated": "Traducao",
+      "lines": "linhas"
+    },
+    "mode": {
+      "single": "Single",
+      "batch": "Batch"
+    },
+    "removeFile": "Remover arquivo"
+  },
+  "settings": {
+    "title": "Configuracoes",
+    "api": {
+      "title": "Conexao com API",
+      "baseUrl": "Base URL",
+      "baseUrlHint": "O endpoint sera adicionado automaticamente.",
+      "format": "Formato",
+      "apiFormat": "Formato da API",
+      "apiFormatHint": "Selecione o formato da API ou deixe em auto-detectar",
+      "autoDetect": "Auto-detectar",
+      "apiKey": "API Key",
+      "model": "Modelo",
+      "searchModels": "Pesquisar modelos",
+      "selectModel": "Selecione um modelo",
+      "noModelsFound": "Nenhum modelo encontrado",
+      "customModel": "Modelo Customizado (opcional)",
+      "customModelHint": "Se preenchido, sera usado em vez do modelo selecionado acima",
+      "languageDetectionModel": "Modelo para Deteccao de Idioma (opcional)",
+      "languageDetectionModelHint": "Modelo leve para detectar o idioma da traducao e usar no mux (ex: gemma-3-1b)",
+      "none": "Nenhum (usar configuracao manual)",
+      "advancedHeaders": "Headers Avancados",
+      "addHeader": "+ Adicionar Header"
+    },
+    "ffmpeg": {
+      "title": "FFmpeg",
+      "check": "Verificar FFmpeg",
+      "checking": "Verificando...",
+      "installed": "Instalado",
+      "notFound": "Nao encontrado",
+      "notFoundTitle": "FFmpeg nao encontrado",
+      "notFoundDescription": "O FFmpeg e necessario para extrair legendas de videos. Instale-o e adicione ao PATH do sistema.",
+      "formatsHint": "ASS/SSA preservam melhor estilos e formatacao",
+      "comingSoon": "em breve"
+    },
+    "prompt": {
+      "title": "Prompt de Traducao",
+      "applyTemplate": "Aplicar template...",
+      "placeholder": "Digite o prompt de traducao...",
+      "hint": "Use um prompt claro que instrua o modelo a traduzir as legendas mantendo formatacao e contexto."
+    },
+    "templates": {
+      "title": "Templates de Prompt",
+      "newTemplate": "+ Novo Template",
+      "noTemplates": "Nenhum template criado ainda",
+      "editTemplate": "Editar Template",
+      "newTemplateTitle": "Novo Template",
+      "nameExample": "Ex: Anime Informal",
+      "promptContent": "Conteudo do Prompt",
+      "promptPlaceholder": "Digite o prompt...",
+      "confirmDelete": "Confirmar Exclusao",
+      "confirmDeleteMessage": "Tem certeza que deseja excluir este template? Esta acao nao pode ser desfeita."
+    },
+    "translationSettings": {
+      "title": "Configuracoes de Traducao",
+      "batchSize": "Tamanho do Batch",
+      "batchSizeHint": "Quantidade de linhas enviadas por requisicao",
+      "lines": "linhas",
+      "parallelRequests": "Requisicoes Paralelas",
+      "parallelRequestsHint": "Numero de batches enviados em paralelo por arquivo (ex: 4 x 50 linhas = 200 linhas simultaneas)",
+      "concurrency": "Concorrencia",
+      "concurrencyHint": "Numero de arquivos processados simultaneamente",
+      "maxRetries": "Maximo de Retentativas",
+      "streaming": "Streaming (exibir traducoes conforme chegam)",
+      "streamingHint": "Quando habilitado, as traducoes aparecem em tempo real conforme a API responde.",
+      "streamingDisabled": "Streaming nao e suportado com a API Anthropic direta. Use uma API compativel com OpenAI.",
+      "autoContinue": "Continuar automaticamente (respostas parciais)",
+      "continueOnError": "Continuar fila em caso de erro"
+    },
+    "output": {
+      "title": "Configuracoes de Saida",
+      "outputMode": "Modo de Saida",
+      "selectMode": "Selecione o modo",
+      "separateFile": "Arquivo Separado",
+      "muxVideo": "Mux no Video (MKV)",
+      "outputFolder": "Pasta de Saida",
+      "sameAsOriginal": "Mesma pasta do original",
+      "languageCode": "Codigo do Idioma",
+      "languageCodeHint": "Codigo ISO 639-2 (ex: por, eng, spa)",
+      "trackTitle": "Titulo da Faixa",
+      "originalFiles": "Arquivos originais:",
+      "preserved": "Preservados",
+      "muxOutputHint": "Legendas salvas como .translated.ass e video muxado como .muxed.mkv",
+      "separateOutputHint": "Legendas traduzidas salvas como .translated.ass"
+    },
+    "appData": {
+      "title": "Dados do Aplicativo",
+      "openConfigFolder": "Abrir pasta de configuracoes",
+      "configFilesHint": "Contem settings.json e templates.json"
+    },
+    "language": {
+      "title": "Idioma",
+      "label": "Idioma da Interface",
+      "hint": "Selecione o idioma da interface do aplicativo"
+    }
+  }
+}
