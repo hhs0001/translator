@@ -277,6 +277,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
           autoContinue: settings.autoContinue,
           continueOnError: settings.continueOnError,
           maxRetries: settings.maxRetries,
+          streaming: settings.streaming,
         }
       );
 
@@ -344,13 +345,20 @@ export function useTranslationEvents() {
   useEffect(() => {
     let unlistenProgress: (() => void) | null = null;
     let unlistenError: (() => void) | null = null;
+    let unlistenEntry: (() => void) | null = null;
     const pendingProgress = new Map<string, { progress: number; translated: number; total: number }>();
+    // Mapa de entradas pendentes para atualização (fileId -> index -> text)
+    const pendingEntries = new Map<string, Map<number, string>>();
+    // Mapa de todas as entradas já traduzidas para contagem correta (fileId -> Set de índices)
+    const translatedIndices = new Map<string, Set<number>>();
     let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const flushProgress = () => {
       flushTimeout = null;
-      if (pendingProgress.size === 0) return;
+
       const updates: Record<string, Partial<QueueFile>> = {};
+
+      // Processa updates de progresso (modo batch)
       for (const [fileId, payload] of pendingProgress.entries()) {
         updates[fileId] = {
           progress: payload.progress,
@@ -359,12 +367,53 @@ export function useTranslationEvents() {
         };
       }
       pendingProgress.clear();
-      useTranslationStore.getState().bulkUpdateFiles(updates);
+
+      // Processa updates de entradas de streaming
+      for (const [fileId, entries] of pendingEntries.entries()) {
+        const store = useTranslationStore.getState();
+        const file = store.queue.find(f => f.id === fileId);
+        if (file && file.originalSubtitle) {
+          // Inicializa o set de índices traduzidos se não existir
+          if (!translatedIndices.has(fileId)) {
+            translatedIndices.set(fileId, new Set());
+          }
+          const indices = translatedIndices.get(fileId)!;
+          const originalEntries = file.originalSubtitle.entries;
+
+          // Atualiza as entradas traduzidas sem pré-preencher com texto original
+          const currentTranslated = file.translatedEntries ? [...file.translatedEntries] : [];
+          for (const [index, text] of entries) {
+            const entryIndex = originalEntries.findIndex(e => e.index === index);
+            if (entryIndex === -1) continue;
+
+            const baseEntry = currentTranslated[entryIndex] ?? originalEntries[entryIndex];
+            currentTranslated[entryIndex] = { ...baseEntry, text };
+            // Adiciona ao set de índices traduzidos
+            indices.add(index);
+          }
+
+          const total = file.totalLines || file.originalSubtitle.entries.length;
+          const translatedCount = indices.size;
+          const progressPercent = total > 0 ? (translatedCount / total) * 100 : 0;
+
+          updates[fileId] = {
+            ...updates[fileId],
+            translatedEntries: currentTranslated,
+            translatedLines: translatedCount,
+            progress: progressPercent,
+          };
+        }
+      }
+      pendingEntries.clear();
+
+      if (Object.keys(updates).length > 0) {
+        useTranslationStore.getState().bulkUpdateFiles(updates);
+      }
     };
 
     const scheduleFlush = () => {
       if (flushTimeout !== null) return;
-      flushTimeout = setTimeout(flushProgress, 100);
+      flushTimeout = setTimeout(flushProgress, 50); // Reduzido para 50ms para atualizações mais rápidas
     };
 
     const setupListeners = async () => {
@@ -374,6 +423,10 @@ export function useTranslationEvents() {
           (event) => {
             const { fileId, progress, translated, total } = event.payload;
             pendingProgress.set(fileId, { progress, translated, total });
+            // Limpa os índices traduzidos quando um novo arquivo começa ou progresso é resetado
+            if (translated === 0) {
+              translatedIndices.delete(fileId);
+            }
             scheduleFlush();
           }
         );
@@ -385,6 +438,19 @@ export function useTranslationEvents() {
             const file = useTranslationStore.getState().queue.find(f => f.id === fileId);
             const fileName = file?.name || 'arquivo';
             useLogsStore.getState().addLog('warning', `Erro em ${fileName} (tentativa ${retryCount}): ${error}`, fileName);
+          }
+        );
+
+        // Listener para streaming de entradas individuais
+        unlistenEntry = await listen<{ fileId: string; index: number; text: string }>(
+          'translation:entry',
+          (event) => {
+            const { fileId, index, text } = event.payload;
+            if (!pendingEntries.has(fileId)) {
+              pendingEntries.set(fileId, new Map());
+            }
+            pendingEntries.get(fileId)!.set(index, text);
+            scheduleFlush();
           }
         );
       } catch (error) {
@@ -400,6 +466,9 @@ export function useTranslationEvents() {
       }
       unlistenProgress?.();
       unlistenError?.();
+      unlistenEntry?.();
+      // Limpa os índices traduzidos ao desmontar
+      translatedIndices.clear();
     };
   }, []);
 }

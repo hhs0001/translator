@@ -189,6 +189,15 @@ struct ErrorEvent {
     retry_count: usize,
 }
 
+/// Evento de streaming de entrada traduzida
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StreamingEntryEvent {
+    file_id: String,
+    index: usize,
+    text: String,
+}
+
 /// Traduz arquivo completo com batching e auto-continue
 #[tauri::command]
 async fn translate_subtitle_full(
@@ -203,6 +212,58 @@ async fn translate_subtitle_full(
 
     // Extrai textos para tradução
     let texts = file.extract_texts();
+    let total = texts.len();
+
+    // Se streaming está habilitado, usa modo streaming
+    if settings.streaming {
+        let file_id_stream = file_id.clone();
+        let app_stream = app.clone();
+
+        let translations = client
+            .translate_subtitles_streaming(
+                &system_prompt,
+                &texts,
+                settings.batch_size,
+                move |entry| {
+                    // Emite evento para cada entrada traduzida
+                    let _ = app_stream.emit("translation:entry", StreamingEntryEvent {
+                        file_id: file_id_stream.clone(),
+                        index: entry.index,
+                        text: entry.text,
+                    });
+                },
+            )
+            .await?;
+
+        let translated_count = translations.len();
+
+        // Aplica traduções de volta
+        file.apply_translations(translations);
+
+        let progress = TranslationProgress {
+            total_entries: total,
+            translated_entries: translated_count,
+            last_translated_index: if translated_count > 0 { translated_count - 1 } else { 0 },
+            is_partial: translated_count < total,
+            can_continue: translated_count < total,
+        };
+
+        // Emite progresso final
+        let _ = app.emit("translation:progress", ProgressEvent {
+            file_id: file_id.clone(),
+            progress: 100.0,
+            translated: translated_count,
+            total,
+        });
+
+        return Ok(SubtitleTranslationResult {
+            file,
+            progress,
+            error_message: None,
+        });
+    }
+
+    // Modo batch padrão
     let file_id_progress = file_id.clone();
     let file_id_retry = file_id.clone();
     let file_id_error = file_id.clone();
@@ -447,6 +508,8 @@ struct AppSettings {
     max_retries: usize,
     #[serde(default = "default_concurrency")]
     concurrency: usize,
+    #[serde(default)]
+    streaming: bool,
 
     // Saída
     #[serde(default = "default_output_mode")]
@@ -484,6 +547,7 @@ impl Default for AppSettings {
             continue_on_error: default_continue_on_error(),
             max_retries: default_max_retries(),
             concurrency: default_concurrency(),
+            streaming: false,
             output_mode: default_output_mode(),
             mux_language: default_mux_language(),
             mux_title: default_mux_title(),

@@ -114,6 +114,19 @@ export function TranslationSettings() {
         <div className="space-y-3 pt-2">
           <div className="flex items-center gap-2">
             <Switch
+              id="streaming"
+              checked={settings.streaming}
+              onCheckedChange={(checked) => updateSetting('streaming', checked)}
+            />
+            <Label htmlFor="streaming">Streaming (exibir traduções conforme chegam)</Label>
+          </div>
+          <p className="text-xs text-muted-foreground ml-10">
+            Quando habilitado, as traduções aparecem em tempo real conforme a API responde.
+            Funciona apenas com APIs compatíveis com OpenAI (não Anthropic direto).
+          </p>
+
+          <div className="flex items-center gap-2">
+            <Switch
               id="auto-continue"
               checked={settings.autoContinue}
               onCheckedChange={(checked) => updateSetting('autoContinue', checked)}

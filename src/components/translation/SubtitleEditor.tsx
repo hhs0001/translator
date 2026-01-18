@@ -20,11 +20,12 @@ function SubtitleEditorBase({ file }: Props) {
     translatedRef.current = translated;
   }, [translated]);
 
+  const translatedCount = file.translatedLines;
   const progress = useMemo(() => (
     entries.length > 0
-      ? Math.round((translated.length / entries.length) * 100)
+      ? Math.round((translatedCount / entries.length) * 100)
       : 0
-  ), [entries.length, translated.length]);
+  ), [entries.length, translatedCount]);
 
   const handleTranslationChange = useCallback((index: number, newText: string) => {
     const current = translatedRef.current;
@@ -37,11 +38,12 @@ function SubtitleEditorBase({ file }: Props) {
 
   // Auto-scroll to current translation
   useEffect(() => {
-    if (scrollRef.current && translated.length > 0) {
-      const lastItem = scrollRef.current.querySelector(`[data-index="${translated.length - 1}"]`);
+    if (scrollRef.current && translatedCount > 0) {
+      const lastIndex = Math.min(translatedCount - 1, entries.length - 1);
+      const lastItem = scrollRef.current.querySelector(`[data-index="${lastIndex}"]`);
       lastItem?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [translated.length]);
+  }, [entries.length, translatedCount]);
 
   return (
     <Card className="p-4 h-[600px] flex flex-col">
@@ -87,5 +89,6 @@ export const SubtitleEditor = memo(SubtitleEditorBase, (prev, next) => (
   prev.file.id === next.file.id &&
   prev.file.name === next.file.name &&
   prev.file.originalSubtitle === next.file.originalSubtitle &&
-  prev.file.translatedEntries === next.file.translatedEntries
+  prev.file.translatedEntries === next.file.translatedEntries &&
+  prev.file.translatedLines === next.file.translatedLines
 ));

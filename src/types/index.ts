@@ -27,6 +27,7 @@ export interface AppSettings {
   continueOnError: boolean;
   maxRetries: number;
   concurrency: number;
+  streaming: boolean;  // Streaming de traduções conforme chegam da API
 
   // Saída
   outputMode: 'mux' | 'separate';
@@ -57,6 +58,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   continueOnError: true,
   maxRetries: 3,
   concurrency: 1,
+  streaming: false,
   outputMode: 'separate',
   muxLanguage: 'por',
   muxTitle: 'Portuguese',

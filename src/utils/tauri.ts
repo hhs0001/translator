@@ -79,6 +79,7 @@ export interface TranslationOptions {
   autoContinue: boolean;
   continueOnError: boolean;
   maxRetries: number;
+  streaming: boolean;
 }
 
 export async function translateSubtitleFull(
@@ -108,6 +109,7 @@ export async function translateSubtitleFull(
       autoContinue: options.autoContinue,
       continueOnError: options.continueOnError,
       maxRetries: options.maxRetries,
+      streaming: options.streaming,
     },
     fileId,
   });

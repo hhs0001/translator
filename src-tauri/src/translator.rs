@@ -1,4 +1,5 @@
 use futures::future::join_all;
+use futures::StreamExt;
 use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -95,6 +96,8 @@ pub struct TranslationSettings {
     #[serde(default)]
     pub continue_on_error: bool,
     pub max_retries: usize,
+    #[serde(default)]
+    pub streaming: bool,
 }
 
 fn default_parallel_requests() -> usize {
@@ -125,6 +128,7 @@ impl Default for TranslationSettings {
             auto_continue: true,
             continue_on_error: false,
             max_retries: 3,
+            streaming: false,
         }
     }
 }
@@ -258,6 +262,31 @@ struct AnthropicResponse {
 #[derive(Debug, Deserialize)]
 struct AnthropicContent {
     text: String,
+}
+
+// Streaming response structs (OpenAI SSE format)
+#[derive(Debug, Deserialize)]
+struct StreamChoice {
+    delta: StreamDelta,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamDelta {
+    #[serde(default)]
+    content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StreamChunk {
+    choices: Vec<StreamChoice>,
+}
+
+/// Event emitted when a single entry is translated (for streaming mode)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TranslatedEntryEvent {
+    pub index: usize,
+    pub text: String,
 }
 
 /// Cliente para comunicação com a API LLM
@@ -528,6 +557,189 @@ impl LlmClient {
             .first()
             .map(|c| c.text.clone())
             .ok_or_else(|| "No response from model".to_string())
+    }
+
+    /// Traduz legendas com streaming (OpenAI format only)
+    /// Emite eventos conforme cada entrada é traduzida
+    /// Usa batching para processar em grupos menores
+    pub async fn translate_subtitles_streaming(
+        &self,
+        system_prompt: &str,
+        entries: &[(usize, String)],
+        batch_size: usize,
+        mut on_entry: impl FnMut(TranslatedEntryEvent),
+    ) -> Result<Vec<(usize, String)>, String> {
+        const NEWLINE_PLACEHOLDER: &str = "<<NEWLINE>>";
+
+        // Cria mapa de índices originais para validação
+        let original_map: HashMap<usize, String> = entries.iter().cloned().collect();
+        let mut all_results = Vec::new();
+
+        // Processa em batches
+        let batches: Vec<Vec<(usize, String)>> = entries
+            .chunks(batch_size)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        for batch in batches {
+            let formatted: String = batch
+                .iter()
+                .map(|(idx, text)| {
+                    let normalized = text
+                        .replace("\\N", NEWLINE_PLACEHOLDER)
+                        .replace("\\n", NEWLINE_PLACEHOLDER)
+                        .replace('\n', NEWLINE_PLACEHOLDER);
+                    format!("{}|{}", idx, normalized)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let instruction = format!(
+                r#"{}
+
+---
+CRITICAL FORMAT INSTRUCTIONS:
+1. Return translations in EXACTLY this format: INDEX|TRANSLATED_TEXT
+2. Each subtitle must be on its own line: number|translated text
+3. The marker {} represents a LINE BREAK within a subtitle. You MUST preserve it exactly as-is in your translation.
+   Example input:  5|It's a special event{}that everyone attends
+   Example output: 5|É um evento especial{}que todos participam
+4. Do NOT remove, split, or modify {} markers - they indicate where line breaks occur in the subtitle display."#,
+                system_prompt, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER
+            );
+
+            let full_content = format!("{}\n\n{}", instruction, formatted);
+
+            let messages = vec![ChatMessage {
+                role: "user".to_string(),
+                content: full_content,
+            }];
+
+            let request = ChatRequest {
+                model: self.config.model.clone(),
+                messages,
+                stream: Some(true),
+            };
+
+            let response = self
+                .apply_headers(
+                    self.client
+                        .post(&self.config.endpoint)
+                        .header("Content-Type", "application/json"),
+                )
+                .json(&request)
+                .send()
+                .await
+                .map_err(|e| format!("Translation request failed: {}", e))?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(format!("Translation API error {}: {}", status, body));
+            }
+
+            let mut current_text = String::new();
+            let mut buffer = String::new();
+
+            let mut stream = response.bytes_stream();
+
+            while let Some(chunk_result) = stream.next().await {
+                let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
+                let chunk_str = String::from_utf8_lossy(&chunk);
+                buffer.push_str(&chunk_str);
+
+                // Process complete SSE lines
+                while let Some(newline_pos) = buffer.find('\n') {
+                    let line = buffer[..newline_pos].trim().to_string();
+                    buffer = buffer[newline_pos + 1..].to_string();
+
+                    if line.is_empty() || line == "data: [DONE]" {
+                        continue;
+                    }
+
+                    if let Some(json_str) = line.strip_prefix("data: ") {
+                        if let Ok(chunk) = serde_json::from_str::<StreamChunk>(json_str) {
+                            for choice in chunk.choices {
+                                if let Some(content) = choice.delta.content {
+                                    // Processa o conteúdo recebido caractere por caractere
+                                    for ch in content.chars() {
+                                        if ch == '\n' {
+                                            // Fim de uma linha - tenta parsear
+                                            let line_content = current_text.trim().to_string();
+                                            if !line_content.is_empty() && !line_content.starts_with("```") {
+                                                if let Some(sep_pos) = line_content.find('|') {
+                                                    let idx_str = &line_content[..sep_pos];
+                                                    if let Ok(idx) = idx_str.trim().parse::<usize>() {
+                                                        let text = line_content[sep_pos + 1..]
+                                                            .replace(NEWLINE_PLACEHOLDER, "\n")
+                                                            .replace("\\N", "\n")
+                                                            .replace("\\n", "\n");
+
+                                                        // Verifica compatibilidade de tags ASS
+                                                        let should_emit = if let Some(original_text) = original_map.get(&idx) {
+                                                            Self::tags_compatible(original_text, &text)
+                                                        } else {
+                                                            true
+                                                        };
+
+                                                        if should_emit {
+                                                            // Emite evento imediatamente
+                                                            on_entry(TranslatedEntryEvent {
+                                                                index: idx,
+                                                                text: text.clone(),
+                                                            });
+                                                            all_results.push((idx, text));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            current_text.clear();
+                                        } else {
+                                            current_text.push(ch);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Processa última linha do batch se houver
+            let line_content = current_text.trim().to_string();
+            if !line_content.is_empty() && !line_content.starts_with("```") {
+                if let Some(sep_pos) = line_content.find('|') {
+                    let idx_str = &line_content[..sep_pos];
+                    if let Ok(idx) = idx_str.trim().parse::<usize>() {
+                        let text = line_content[sep_pos + 1..]
+                            .replace(NEWLINE_PLACEHOLDER, "\n")
+                            .replace("\\N", "\n")
+                            .replace("\\n", "\n");
+
+                        let should_emit = if let Some(original_text) = original_map.get(&idx) {
+                            Self::tags_compatible(original_text, &text)
+                        } else {
+                            true
+                        };
+
+                        if should_emit {
+                            on_entry(TranslatedEntryEvent {
+                                index: idx,
+                                text: text.clone(),
+                            });
+                            all_results.push((idx, text));
+                        }
+                    }
+                }
+            }
+        }
+
+        if all_results.is_empty() {
+            return Err("Failed to parse streaming translation response".to_string());
+        }
+
+        all_results.sort_by_key(|(idx, _)| *idx);
+        Ok(all_results)
     }
 
     /// Traduz legendas em batch, preservando a estrutura
