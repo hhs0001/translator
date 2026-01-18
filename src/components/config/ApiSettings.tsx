@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -10,6 +11,7 @@ import { useModels } from '../../hooks/useModels';
 import { Header, ApiFormat } from '../../types';
 
 export function ApiSettings() {
+  const { t } = useTranslation();
   const { settings, updateSetting } = useSettingsStore();
   const { models, isLoading, error, refetch, detectedFormat } = useModels();
   const [modelSearch, setModelSearch] = useState('');
@@ -58,11 +60,11 @@ export function ApiSettings() {
 
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">Conexao com API</h3>
+      <h3 className="text-lg font-semibold mb-4">{t('settings.api.title')}</h3>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Base URL</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.api.baseUrl')}</label>
           <Input
             placeholder="http://localhost:8045/v1"
             value={settings.baseUrl}
@@ -70,33 +72,33 @@ export function ApiSettings() {
             className="w-full"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            O endpoint sera adicionado automaticamente.
+            {t('settings.api.baseUrlHint')}
             <span className="ml-2 px-2 py-0.5 rounded bg-muted text-muted-foreground font-medium">
-              Formato: {formatDisplayName}
+              {t('settings.api.format')}: {formatDisplayName}
             </span>
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Formato da API</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.api.apiFormat')}</label>
           <Select value={settings.apiFormat} onValueChange={handleFormatChange}>
-            <Label className="sr-only">Formato da API</Label>
+            <Label className="sr-only">{t('settings.api.apiFormat')}</Label>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione o formato" />
+              <SelectValue placeholder={t('settings.api.selectMode')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="auto">Auto-detectar</SelectItem>
+              <SelectItem value="auto">{t('settings.api.autoDetect')}</SelectItem>
               <SelectItem value="openai">OpenAI Compatible</SelectItem>
               <SelectItem value="anthropic">Anthropic</SelectItem>
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground mt-1">
-            Selecione o formato da API ou deixe em auto-detectar
+            {t('settings.api.apiFormatHint')}
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">API Key</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.api.apiKey')}</label>
           <Input
             type="password"
             placeholder={detectedFormat === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
@@ -107,9 +109,9 @@ export function ApiSettings() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Modelo</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.api.model')}</label>
           <Input
-            placeholder="Pesquisar modelos"
+            placeholder={t('settings.api.searchModels')}
             value={modelSearch}
             onChange={(e) => setModelSearch(e.target.value)}
             className="w-full mb-2"
@@ -121,14 +123,14 @@ export function ApiSettings() {
               onValueChange={handleModelChange}
               disabled={isLoading || models.length === 0}
             >
-              <Label className="sr-only">Modelo</Label>
+              <Label className="sr-only">{t('settings.api.model')}</Label>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder={isLoading ? 'Carregando...' : 'Selecione um modelo'} />
+                <SelectValue placeholder={isLoading ? t('common.loading') : t('settings.api.selectModel')} />
               </SelectTrigger>
               <SelectContent>
                 {filteredModels.length === 0 ? (
                   <SelectItem value="no-results" disabled>
-                    Nenhum modelo encontrado
+                    {t('settings.api.noModelsFound')}
                   </SelectItem>
                 ) : (
                   filteredModels.map((model) => {
@@ -161,7 +163,7 @@ export function ApiSettings() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Modelo Customizado (opcional)</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.api.customModel')}</label>
           <Input
             placeholder={detectedFormat === 'anthropic' ? 'claude-sonnet-4-5-20250929' : 'gpt-4-turbo'}
             value={settings.customModel}
@@ -169,12 +171,12 @@ export function ApiSettings() {
             className="w-full"
           />
           <p className="text-xs text-muted-foreground mt-1">
-            Se preenchido, sera usado em vez do modelo selecionado acima
+            {t('settings.api.customModelHint')}
           </p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Modelo para Deteccao de Idioma (opcional)</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.api.languageDetectionModel')}</label>
           <Select
             value={settings.languageDetectionModel || 'none'}
             onValueChange={(value) =>
@@ -182,12 +184,12 @@ export function ApiSettings() {
             }
             disabled={isLoading || models.length === 0}
           >
-            <Label className="sr-only">Modelo para Deteccao</Label>
+            <Label className="sr-only">{t('settings.api.languageDetectionModel')}</Label>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Nenhum (usar configuracao manual)" />
+              <SelectValue placeholder={t('settings.api.none')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">Nenhum (usar configuracao manual)</SelectItem>
+              <SelectItem value="none">{t('settings.api.none')}</SelectItem>
               {models.map((model) => {
                 const displayName = model.name || model.id;
                 return (
@@ -204,13 +206,13 @@ export function ApiSettings() {
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground mt-1">
-            Modelo leve para detectar o idioma da traducao e usar no mux (ex: gemma-3-1b)
+            {t('settings.api.languageDetectionModelHint')}
           </p>
         </div>
 
         <Accordion type="single" collapsible>
           <AccordionItem value="headers">
-            <AccordionTrigger>Headers Avancados</AccordionTrigger>
+            <AccordionTrigger>{t('settings.api.advancedHeaders')}</AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2">
                 {settings.headers.map((header) => (
@@ -237,7 +239,7 @@ export function ApiSettings() {
                   </div>
                 ))}
                 <Button variant="default" size="sm" onClick={addHeader}>
-                  + Adicionar Header
+                  {t('settings.api.addHeader')}
                 </Button>
               </div>
             </AccordionContent>

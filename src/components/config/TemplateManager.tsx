@@ -1,14 +1,16 @@
+import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useState } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { Template } from '../../types';
 
 export function TemplateManager() {
+  const { t } = useTranslation();
   const { templates, addTemplate, updateTemplate, deleteTemplate } = useSettingsStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -74,15 +76,15 @@ export function TemplateManager() {
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Templates de Prompt</h3>
+        <h3 className="text-lg font-semibold">{t('settings.templates.title')}</h3>
         <Button variant="default" size="sm" onClick={openNewModal}>
-          + Novo Template
+          {t('settings.templates.newTemplate')}
         </Button>
       </div>
 
       {templates.length === 0 ? (
         <p className="text-muted-foreground text-center py-4">
-          Nenhum template criado ainda
+          {t('settings.templates.noTemplates')}
         </p>
       ) : (
         <div className="space-y-2">
@@ -99,14 +101,14 @@ export function TemplateManager() {
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="ghost" onClick={() => openEditModal(template)}>
-                  Editar
+                  {t('common.edit')}
                 </Button>
                 <Button
                   size="sm"
                   variant="destructive"
                   onClick={() => openDeleteConfirm(template.id)}
                 >
-                  Excluir
+                  {t('common.delete')}
                 </Button>
               </div>
             </div>
@@ -114,25 +116,27 @@ export function TemplateManager() {
         </div>
       )}
 
-      {/* Modal de Edição/Criação */}
+      {/* Edit/Create Modal */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>{editingTemplate ? 'Editar Template' : 'Novo Template'}</DialogTitle>
+            <DialogTitle>
+              {editingTemplate ? t('settings.templates.editTemplate') : t('settings.templates.newTemplateTitle')}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex flex-col gap-1">
-              <Label>Nome</Label>
+              <Label>{t('common.name')}</Label>
               <Input
-                placeholder="Ex: Anime Informal"
+                placeholder={t('settings.templates.nameExample')}
                 value={name}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
               />
             </div>
             <div className="flex flex-col gap-1">
-              <Label>Conteúdo do Prompt</Label>
+              <Label>{t('settings.templates.promptContent')}</Label>
               <Textarea
-                placeholder="Digite o prompt..."
+                placeholder={t('settings.templates.promptPlaceholder')}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 className="min-h-[200px]"
@@ -141,28 +145,28 @@ export function TemplateManager() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsModalOpen(false)}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
             <Button variant="default" onClick={handleSave} disabled={isSaving}>
-              {isSaving ? 'Salvando...' : 'Salvar'}
+              {isSaving ? t('common.saving') : t('common.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Confirmação de Exclusão */}
+      {/* Delete Confirmation Modal */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>Confirmar Exclusão</DialogTitle>
+            <DialogTitle>{t('settings.templates.confirmDelete')}</DialogTitle>
           </DialogHeader>
-          <p>Tem certeza que deseja excluir este template? Esta ação não pode ser desfeita.</p>
+          <p>{t('settings.templates.confirmDeleteMessage')}</p>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
-              Cancelar
+              {t('common.cancel')}
             </Button>
             <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-              {isDeleting ? 'Excluindo...' : 'Excluir'}
+              {isDeleting ? t('common.deleting') : t('common.delete')}
             </Button>
           </DialogFooter>
         </DialogContent>

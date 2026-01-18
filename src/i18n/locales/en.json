@@ -1,0 +1,179 @@
+{
+  "common": {
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleting": "Deleting...",
+    "edit": "Edit",
+    "clear": "Clear",
+    "select": "Select",
+    "loading": "Loading...",
+    "or": "or",
+    "name": "Name",
+    "file": "File",
+    "files": "files",
+    "lines": "lines"
+  },
+  "navbar": {
+    "title": "SubTranslator",
+    "translation": "Translation",
+    "settings": "Settings",
+    "logs": "Logs",
+    "translate": "Translate",
+    "pause": "Pause",
+    "resume": "Resume",
+    "inQueue": "in queue"
+  },
+  "logs": {
+    "title": "Logs",
+    "filter": {
+      "all": "All",
+      "info": "Info",
+      "success": "Success",
+      "warning": "Warning",
+      "error": "Error"
+    },
+    "empty": "No logs found",
+    "showMore": "Show more ({{count}})",
+    "showLess": "Show less"
+  },
+  "translation": {
+    "dropzone": {
+      "title": "Drop files here",
+      "subtitle": "Supports: SRT, ASS, SSA, MKV, MP4, AVI",
+      "selectFiles": "Select files"
+    },
+    "queue": {
+      "title": "Queue",
+      "file": "file",
+      "files": "files",
+      "moreFiles": "+{{count}} file(s) in queue",
+      "applyTrackAll": "Apply track to all",
+      "trackForAll": "Track {{index}} for all"
+    },
+    "status": {
+      "pending": "Pending",
+      "extracting": "Extracting",
+      "translating": "Translating",
+      "detecting_language": "Detecting Language",
+      "saving": "Saving",
+      "muxing": "Muxing",
+      "paused": "Paused",
+      "completed": "Completed",
+      "error": "Error"
+    },
+    "video": {
+      "detectingTracks": "Detecting tracks...",
+      "noTracksFound": "No subtitle tracks found",
+      "track": "Track {{index}}",
+      "subtitleTrack": "Subtitle track"
+    },
+    "editor": {
+      "original": "Original",
+      "translated": "Translation",
+      "lines": "lines"
+    },
+    "mode": {
+      "single": "Single",
+      "batch": "Batch"
+    },
+    "removeFile": "Remove file"
+  },
+  "settings": {
+    "title": "Settings",
+    "api": {
+      "title": "API Connection",
+      "baseUrl": "Base URL",
+      "baseUrlHint": "The endpoint will be added automatically.",
+      "format": "Format",
+      "apiFormat": "API Format",
+      "apiFormatHint": "Select the API format or leave on auto-detect",
+      "autoDetect": "Auto-detect",
+      "apiKey": "API Key",
+      "model": "Model",
+      "searchModels": "Search models",
+      "selectModel": "Select a model",
+      "selectMode": "Select mode",
+      "noModelsFound": "No models found",
+      "customModel": "Custom Model (optional)",
+      "customModelHint": "If filled, will be used instead of the selected model above",
+      "languageDetectionModel": "Language Detection Model (optional)",
+      "languageDetectionModelHint": "Lightweight model to detect translation language for mux (e.g., gemma-3-1b)",
+      "none": "None (use manual configuration)",
+      "advancedHeaders": "Advanced Headers",
+      "addHeader": "+ Add Header"
+    },
+    "ffmpeg": {
+      "title": "FFmpeg",
+      "check": "Check FFmpeg",
+      "checking": "Checking...",
+      "installed": "Installed",
+      "notFound": "Not found",
+      "notFoundTitle": "FFmpeg not found",
+      "notFoundDescription": "FFmpeg is required to extract subtitles from videos. Install it and add it to the system PATH.",
+      "formatsHint": "ASS/SSA better preserve styles and formatting",
+      "comingSoon": "coming soon"
+    },
+    "prompt": {
+      "title": "Translation Prompt",
+      "applyTemplate": "Apply template...",
+      "placeholder": "Enter the translation prompt...",
+      "hint": "Use a clear prompt that instructs the model to translate subtitles while maintaining formatting and context."
+    },
+    "templates": {
+      "title": "Prompt Templates",
+      "newTemplate": "+ New Template",
+      "noTemplates": "No templates created yet",
+      "editTemplate": "Edit Template",
+      "newTemplateTitle": "New Template",
+      "nameExample": "E.g.: Anime Informal",
+      "promptContent": "Prompt Content",
+      "promptPlaceholder": "Enter the prompt...",
+      "confirmDelete": "Confirm Deletion",
+      "confirmDeleteMessage": "Are you sure you want to delete this template? This action cannot be undone."
+    },
+    "translationSettings": {
+      "title": "Translation Settings",
+      "batchSize": "Batch Size",
+      "batchSizeHint": "Number of lines sent per request",
+      "lines": "lines",
+      "parallelRequests": "Parallel Requests",
+      "parallelRequestsHint": "Number of batches sent in parallel per file (e.g., 4 x 50 lines = 200 simultaneous lines)",
+      "concurrency": "Concurrency",
+      "concurrencyHint": "Number of files processed simultaneously",
+      "maxRetries": "Maximum Retries",
+      "streaming": "Streaming (show translations as they arrive)",
+      "streamingHint": "When enabled, translations appear in real-time as the API responds.",
+      "streamingDisabled": "Streaming is not supported with the direct Anthropic API. Use an OpenAI-compatible API.",
+      "autoContinue": "Auto-continue (partial responses)",
+      "continueOnError": "Continue queue on error"
+    },
+    "output": {
+      "title": "Output Settings",
+      "outputMode": "Output Mode",
+      "selectMode": "Select mode",
+      "separateFile": "Separate File",
+      "muxVideo": "Mux to Video (MKV)",
+      "outputFolder": "Output Folder",
+      "sameAsOriginal": "Same folder as original",
+      "languageCode": "Language Code",
+      "languageCodeHint": "ISO 639-2 code (e.g., por, eng, spa)",
+      "trackTitle": "Track Title",
+      "originalFiles": "Original files:",
+      "preserved": "Preserved",
+      "muxOutputHint": "Subtitles saved as .translated.ass and video muxed as .muxed.mkv",
+      "separateOutputHint": "Translated subtitles saved as .translated.ass"
+    },
+    "appData": {
+      "title": "Application Data",
+      "openConfigFolder": "Open configuration folder",
+      "configFilesHint": "Contains settings.json and templates.json"
+    },
+    "language": {
+      "title": "Language",
+      "label": "Interface Language",
+      "hint": "Select the language for the application interface"
+    }
+  }
+}

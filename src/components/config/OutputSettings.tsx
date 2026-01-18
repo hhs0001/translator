@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -6,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export function OutputSettings() {
+  const { t } = useTranslation();
   const { settings, updateSetting } = useSettingsStore();
 
   const selectOutputDir = async () => {
@@ -19,44 +21,44 @@ export function OutputSettings() {
         updateSetting('separateOutputDir', dir as string);
       }
     } catch (err) {
-      console.error('Erro ao abrir diálogo:', err);
+      console.error('Error opening dialog:', err);
     }
   };
 
   return (
     <Card className="p-6">
-      <h3 className="text-lg font-semibold mb-4">Configurações de Saída</h3>
+      <h3 className="text-lg font-semibold mb-4">{t('settings.output.title')}</h3>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium mb-1">Modo de Saída</label>
+          <label className="block text-sm font-medium mb-1">{t('settings.output.outputMode')}</label>
           <Select
             value={settings.outputMode}
             onValueChange={(value) => updateSetting('outputMode', value as 'mux' | 'separate')}
           >
-            <Label className="sr-only">Modo</Label>
+            <Label className="sr-only">{t('settings.output.outputMode')}</Label>
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Selecione o modo" />
+              <SelectValue placeholder={t('settings.output.selectMode')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="separate">Arquivo Separado</SelectItem>
-              <SelectItem value="mux">Mux no Vídeo (MKV)</SelectItem>
+              <SelectItem value="separate">{t('settings.output.separateFile')}</SelectItem>
+              <SelectItem value="mux">{t('settings.output.muxVideo')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {settings.outputMode === 'separate' && (
           <div>
-            <label className="block text-sm font-medium mb-1">Pasta de Saída</label>
+            <label className="block text-sm font-medium mb-1">{t('settings.output.outputFolder')}</label>
             <div className="flex gap-2">
               <Input
                 value={settings.separateOutputDir}
                 onChange={(e) => updateSetting('separateOutputDir', e.target.value)}
-                placeholder="Mesma pasta do original"
+                placeholder={t('settings.output.sameAsOriginal')}
                 className="flex-1"
               />
               <Button variant="ghost" onClick={selectOutputDir}>
-                Selecionar
+                {t('common.select')}
               </Button>
             </div>
           </div>
@@ -65,7 +67,7 @@ export function OutputSettings() {
         {settings.outputMode === 'mux' && (
           <>
             <div>
-              <label className="block text-sm font-medium mb-1">Código do Idioma</label>
+              <label className="block text-sm font-medium mb-1">{t('settings.output.languageCode')}</label>
               <Input
                 value={settings.muxLanguage}
                 onChange={(e) => updateSetting('muxLanguage', e.target.value)}
@@ -73,12 +75,12 @@ export function OutputSettings() {
                 className="w-32"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Código ISO 639-2 (ex: por, eng, spa)
+                {t('settings.output.languageCodeHint')}
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Título da Faixa</label>
+              <label className="block text-sm font-medium mb-1">{t('settings.output.trackTitle')}</label>
               <Input
                 value={settings.muxTitle}
                 onChange={(e) => updateSetting('muxTitle', e.target.value)}
@@ -91,12 +93,12 @@ export function OutputSettings() {
 
         <div className="p-3 bg-muted/50 rounded-lg">
           <p className="text-sm">
-            <span className="font-medium">Arquivos originais:</span> Preservados
+            <span className="font-medium">{t('settings.output.originalFiles')}</span> {t('settings.output.preserved')}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            {settings.outputMode === 'mux' 
-              ? 'Legendas salvas como .translated.ass e vídeo muxado como .muxed.mkv'
-              : 'Legendas traduzidas salvas como .translated.ass'}
+            {settings.outputMode === 'mux'
+              ? t('settings.output.muxOutputHint')
+              : t('settings.output.separateOutputHint')}
           </p>
         </div>
       </div>

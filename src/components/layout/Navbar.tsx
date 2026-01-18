@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function Navbar({ activeTab, onTabChange }: Props) {
+  const { t } = useTranslation();
   const {
     isTranslating,
     isPaused,
@@ -62,22 +64,22 @@ export function Navbar({ activeTab, onTabChange }: Props) {
   };
 
   const getTranslateButtonText = () => {
-    if (!isTranslating && !isProcessing) return 'Traduzir';
-    if (isPaused) return 'Retomar';
-    if (isProcessing) return 'Pausar';
-    return 'Traduzir';
+    if (!isTranslating && !isProcessing) return t('navbar.translate');
+    if (isPaused) return t('navbar.resume');
+    if (isProcessing) return t('navbar.pause');
+    return t('navbar.translate');
   };
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-background border-b border-border h-16">
       <div className="container mx-auto px-4 h-full flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold">SubTranslator</h1>
+          <h1 className="text-xl font-bold">{t('navbar.title')}</h1>
 
           <Tabs value={activeTab} onValueChange={onTabChange} className="hidden sm:flex">
             <TabsList>
-              <TabsTrigger value="translation">Tradução</TabsTrigger>
-              <TabsTrigger value="config">Configurações</TabsTrigger>
+              <TabsTrigger value="translation">{t('navbar.translation')}</TabsTrigger>
+              <TabsTrigger value="config">{t('navbar.settings')}</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -101,7 +103,7 @@ export function Navbar({ activeTab, onTabChange }: Props) {
               variant="outline"
               className="border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300"
             >
-              {pendingCount} na fila
+              {pendingCount} {t('navbar.inQueue')}
             </Badge>
           )}
 
@@ -118,7 +120,7 @@ export function Navbar({ activeTab, onTabChange }: Props) {
             onClick={toggleDrawer}
             className="relative"
           >
-            Logs
+            {t('navbar.logs')}
             {errorCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-destructive text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                 {errorCount}

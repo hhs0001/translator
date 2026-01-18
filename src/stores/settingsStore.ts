@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { AppSettings, DEFAULT_SETTINGS, Template } from '../types';
 import * as TauriUtils from '../utils/tauri';
+import i18n from '../i18n';
 
 interface SettingsState {
   settings: AppSettings;
@@ -29,7 +30,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadSettings: async () => {
     try {
       const settings = await TauriUtils.loadSettings();
-      set({ settings: { ...DEFAULT_SETTINGS, ...settings }, isLoading: false });
+      const merged = { ...DEFAULT_SETTINGS, ...settings };
+      set({ settings: merged, isLoading: false });
+
+      // Sync language with i18n
+      if (merged.language && merged.language !== i18n.language) {
+        await i18n.changeLanguage(merged.language);
+      }
     } catch (error) {
       console.error('Failed to load settings:', error);
       set({ isLoading: false });

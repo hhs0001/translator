@@ -521,6 +521,10 @@ struct AppSettings {
     mux_title: String,
     #[serde(default)]
     separate_output_dir: String,
+
+    // Interface language
+    #[serde(default = "default_language")]
+    language: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -553,6 +557,7 @@ impl Default for AppSettings {
             mux_language: default_mux_language(),
             mux_title: default_mux_title(),
             separate_output_dir: String::new(),
+            language: default_language(),
         }
     }
 }
@@ -595,6 +600,10 @@ fn default_mux_language() -> String {
 
 fn default_mux_title() -> String {
     "Portuguese".to_string()
+}
+
+fn default_language() -> String {
+    "en".to_string()
 }
 
 fn get_settings_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {

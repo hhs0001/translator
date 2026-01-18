@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -18,7 +19,7 @@ const LEVEL_BADGE_CLASSES: Record<LogLevel, string> = {
 const EMPTY_LOGS: LogEntry[] = [];
 const MAX_VISIBLE_LOGS = 200;
 
-const LogRow = memo(function LogRow({ log }: { log: LogEntry }) {
+const LogRow = memo(function LogRow({ log, fileLabel }: { log: LogEntry; fileLabel: string }) {
   return (
     <div className="p-3 hover:bg-muted/50">
       <div className="flex items-start gap-2">
@@ -32,7 +33,7 @@ const LogRow = memo(function LogRow({ log }: { log: LogEntry }) {
           <p className="text-sm break-words">{log.message}</p>
           {log.file && (
             <p className="text-xs text-muted-foreground mt-1">
-              Arquivo: {log.file}
+              {fileLabel}: {log.file}
             </p>
           )}
           <p className="text-xs text-muted-foreground mt-1">
@@ -45,6 +46,7 @@ const LogRow = memo(function LogRow({ log }: { log: LogEntry }) {
 });
 
 export function LogsDrawer() {
+  const { t } = useTranslation();
   const { logs, isOpen, closeDrawer, clearLogs, filter, setFilter } = useLogsStore(
     useShallow((s) => ({
       logs: s.isOpen ? s.logs : EMPTY_LOGS,
@@ -78,25 +80,25 @@ export function LogsDrawer() {
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeDrawer()}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader className="flex flex-row items-center justify-between">
-          <DialogTitle>Logs</DialogTitle>
+          <DialogTitle>{t('logs.title')}</DialogTitle>
           <div className="flex gap-2">
             <Select
               value={filter}
               onValueChange={(value) => setFilter(value as LogLevel | 'all')}
             >
               <SelectTrigger className="w-28">
-                <SelectValue placeholder="Todos" />
+                <SelectValue placeholder={t('logs.filter.all')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="success">Sucesso</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="error">Erro</SelectItem>
+                <SelectItem value="all">{t('logs.filter.all')}</SelectItem>
+                <SelectItem value="info">{t('logs.filter.info')}</SelectItem>
+                <SelectItem value="success">{t('logs.filter.success')}</SelectItem>
+                <SelectItem value="warning">{t('logs.filter.warning')}</SelectItem>
+                <SelectItem value="error">{t('logs.filter.error')}</SelectItem>
               </SelectContent>
             </Select>
             <Button size="sm" variant="ghost" onClick={clearLogs}>
-              Limpar
+              {t('common.clear')}
             </Button>
           </div>
         </DialogHeader>
@@ -106,11 +108,11 @@ export function LogsDrawer() {
             {!isOpen ? null : (
               visibleLogs.length === 0 ? (
                 <p className="p-4 text-center text-muted-foreground">
-                  Nenhum log encontrado
+                  {t('logs.empty')}
                 </p>
               ) : (
                 visibleLogs.map((log) => (
-                  <LogRow key={log.id} log={log} />
+                  <LogRow key={log.id} log={log} fileLabel={t('common.file')} />
                 ))
               )
             )}
@@ -123,7 +125,7 @@ export function LogsDrawer() {
               variant="ghost"
               onClick={() => setShowAll((prev) => !prev)}
             >
-              {showAll ? 'Mostrar menos' : `Mostrar mais (${hiddenCount})`}
+              {showAll ? t('logs.showLess') : t('logs.showMore', { count: hiddenCount })}
             </Button>
           </div>
         )}
