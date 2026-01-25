@@ -147,15 +147,27 @@ pub fn mux_subtitle_track(
         video_path.to_string(),
         "-i".to_string(),
         subtitle_path.to_string(),
-        "-c".to_string(),
-        "copy".to_string(),
         "-map".to_string(),
-        "0".to_string(),
+        "0:v".to_string(),  // Mapeia vídeo do arquivo original
         "-map".to_string(),
-        "1".to_string(),
+        "0:a?".to_string(), // Mapeia áudio (opcional)
+        "-map".to_string(),
+        "1:s".to_string(),  // Mapeia a legenda traduzida PRIMEIRO (será índice 0)
+        "-map".to_string(),
+        "0:s?".to_string(), // Mapeia legendas originais DEPOIS (opcional)
+        "-c:v".to_string(),
+        "copy".to_string(), // Copia vídeo sem recodificar
+        "-c:a".to_string(),
+        "copy".to_string(), // Copia áudio sem recodificar
+        "-c:s:0".to_string(),
+        "ass".to_string(),  // Força codec ASS apenas para a legenda traduzida (índice 0)
+        "-c:s".to_string(),
+        "copy".to_string(), // Copia as demais legendas (originais) sem recodificar
+        "-disposition:s:0".to_string(),
+        "default".to_string(), // Marca a legenda traduzida (índice 0) como padrão
     ];
 
-    // Adiciona metadados da faixa
+    // Adiciona metadados da faixa traduzida (índice 0)
     if let Some(lang) = language {
         args.push("-metadata:s:s:0".to_string());
         args.push(format!("language={}", lang));
