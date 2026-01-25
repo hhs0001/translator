@@ -159,8 +159,10 @@ pub fn mux_subtitle_track(
         "copy".to_string(), // Copia vídeo sem recodificar
         "-c:a".to_string(),
         "copy".to_string(), // Copia áudio sem recodificar
+        "-c:s:0".to_string(),
+        "ass".to_string(),  // Força codec ASS apenas para a legenda traduzida (índice 0)
         "-c:s".to_string(),
-        "ass".to_string(),  // Força codec ASS para legendas (processa corretamente)
+        "copy".to_string(), // Copia as demais legendas (originais) sem recodificar
         "-disposition:s:0".to_string(),
         "default".to_string(), // Marca a legenda traduzida (índice 0) como padrão
     ];
