@@ -147,12 +147,26 @@ pub fn mux_subtitle_track(
         video_path.to_string(),
         "-i".to_string(),
         subtitle_path.to_string(),
+        // Mapeia video/audio/anexos/dados do original, e coloca a legenda traduzida primeiro
+        "-map".to_string(),
+        "0:v?".to_string(),
+        "-map".to_string(),
+        "0:a?".to_string(),
+        "-map".to_string(),
+        "0:t?".to_string(),
+        "-map".to_string(),
+        "0:d?".to_string(),
+        "-map".to_string(),
+        "1:0".to_string(),
+        "-map".to_string(),
+        "0:s?".to_string(),
         "-c".to_string(),
         "copy".to_string(),
-        "-map".to_string(),
+        // Garante que a legenda traduzida (s:0) seja a padrÃ£o
+        "-disposition:s".to_string(),
         "0".to_string(),
-        "-map".to_string(),
-        "1".to_string(),
+        "-disposition:s:0".to_string(),
+        "default".to_string(),
     ];
 
     // Adiciona metadados da faixa
