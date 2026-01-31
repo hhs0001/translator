@@ -35,6 +35,8 @@ export interface AppSettings {
   muxLanguage: string;
   muxTitle: string;
   separateOutputDir: string;
+  cleanupExtractedSubtitles: boolean;
+  cleanupMuxArtifacts: boolean;
 
   // Interface language
   language: Language;
@@ -67,6 +69,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   muxLanguage: 'por',
   muxTitle: 'Portuguese',
   separateOutputDir: '',
+  cleanupExtractedSubtitles: false,
+  cleanupMuxArtifacts: false,
   language: 'en',
 };
 
@@ -154,7 +158,7 @@ export interface DetectedLanguage {
 // TRANSLATION QUEUE
 // ============================================
 
-export type FileStatus = 'pending' | 'extracting' | 'translating' | 'detecting_language' | 'saving' | 'muxing' | 'paused' | 'completed' | 'error';
+export type FileStatus = 'pending' | 'extracting' | 'translating' | 'detecting_language' | 'saving' | 'muxing' | 'paused' | 'cancelled' | 'completed' | 'error';
 
 export interface QueueFile {
   id: string;

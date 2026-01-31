@@ -50,7 +50,9 @@
       "files": "arquivos",
       "moreFiles": "+{{count}} arquivo(s) na fila",
       "applyTrackAll": "Aplicar faixa em todos",
-      "trackForAll": "Faixa {{index}} em todos"
+      "trackForAll": "Faixa {{index}} em todos",
+      "cancelFile": "Cancelar traducao",
+      "cancelAll": "Cancelar tudo"
     },
     "status": {
       "pending": "Pendente",
@@ -60,6 +62,7 @@
       "saving": "Salvando",
       "muxing": "Muxando",
       "paused": "Pausado",
+      "cancelled": "Cancelado",
       "completed": "Concluido",
       "error": "Erro"
     },
@@ -160,6 +163,10 @@
       "languageCode": "Codigo do Idioma",
       "languageCodeHint": "Codigo ISO 639-2 (ex: por, eng, spa)",
       "trackTitle": "Titulo da Faixa",
+      "cleanupExtracted": "Remover legendas extraidas apos a traducao",
+      "cleanupExtractedHint": "Remove legendas temporarias extraidas de videos.",
+      "cleanupMux": "Manter somente o video muxado",
+      "cleanupMuxHint": "Remove o arquivo de legenda traduzida apos o mux.",
       "originalFiles": "Arquivos originais:",
       "preserved": "Preservados",
       "muxOutputHint": "Legendas salvas como .translated.ass e video muxado como .muxed.mkv",

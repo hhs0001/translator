@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useSettingsStore } from '../../stores/settingsStore';
 
 export function OutputSettings() {
@@ -90,6 +91,36 @@ export function OutputSettings() {
             </div>
           </>
         )}
+
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="cleanup-extracted"
+              checked={settings.cleanupExtractedSubtitles}
+              onCheckedChange={(checked) => updateSetting('cleanupExtractedSubtitles', checked)}
+            />
+            <Label htmlFor="cleanup-extracted">{t('settings.output.cleanupExtracted')}</Label>
+          </div>
+          <p className="text-xs text-muted-foreground ml-10">
+            {t('settings.output.cleanupExtractedHint')}
+          </p>
+
+          {settings.outputMode === 'mux' && (
+            <>
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="cleanup-mux"
+                  checked={settings.cleanupMuxArtifacts}
+                  onCheckedChange={(checked) => updateSetting('cleanupMuxArtifacts', checked)}
+                />
+                <Label htmlFor="cleanup-mux">{t('settings.output.cleanupMux')}</Label>
+              </div>
+              <p className="text-xs text-muted-foreground ml-10">
+                {t('settings.output.cleanupMuxHint')}
+              </p>
+            </>
+          )}
+        </div>
 
         <div className="p-3 bg-muted/50 rounded-lg">
           <p className="text-sm">

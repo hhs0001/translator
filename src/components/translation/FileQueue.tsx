@@ -10,15 +10,17 @@ import { useShallow } from 'zustand/shallow';
 
 interface Props {
   maxVisible?: number;
+  showCancelAll?: boolean;
 }
 
-export function FileQueue({ maxVisible }: Props) {
+export function FileQueue({ maxVisible, showCancelAll }: Props) {
   const { t } = useTranslation();
-  const { queue, clearQueue, setAllVideoTracks } = useTranslationStore(
+  const { queue, clearQueue, setAllVideoTracks, cancelAllTranslations } = useTranslationStore(
     useShallow((s) => ({
       queue: s.queue,
       clearQueue: s.clearQueue,
       setAllVideoTracks: s.setAllVideoTracks,
+      cancelAllTranslations: s.cancelAllTranslations,
     }))
   );
 
@@ -47,6 +49,12 @@ export function FileQueue({ maxVisible }: Props) {
     () => Array.from({ length: maxTracks }, (_, i) => i),
     [maxTracks]
   );
+  const canCancelAll = useMemo(
+    () => queue.some((file) => (
+      file.status === 'pending' || ['extracting', 'translating', 'detecting_language', 'saving', 'muxing'].includes(file.status)
+    )),
+    [queue]
+  );
 
   const handleQuickSelect = (value: string) => {
     if (value !== '') {
@@ -67,6 +75,17 @@ export function FileQueue({ maxVisible }: Props) {
           {t('translation.queue.title')} ({queue.length} {fileLabel})
         </h3>
         <div className="flex items-center gap-2">
+          {showCancelAll && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+              onClick={cancelAllTranslations}
+              disabled={!canCancelAll}
+            >
+              {t('translation.queue.cancelAll')}
+            </Button>
+          )}
           {hasMultipleVideos && maxTracks > 0 && (
             <Select onValueChange={handleQuickSelect}>
               <Label className="sr-only">{t('translation.queue.applyTrackAll')}</Label>

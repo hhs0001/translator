@@ -115,6 +115,14 @@ export async function translateSubtitleFull(
   });
 }
 
+export async function cancelTranslation(fileId: string): Promise<void> {
+  return invoke('cancel_translation', { fileId });
+}
+
+export async function cancelAllTranslations(): Promise<void> {
+  return invoke('cancel_all_translations');
+}
+
 export async function backupFile(path: string): Promise<string> {
   return invoke('backup_file', { path });
 }
@@ -125,6 +133,10 @@ export async function replaceFile(sourcePath: string, targetPath: string): Promi
 
 export async function getFileInfo(path: string): Promise<{ path: string; filename: string; extension: string; size: number; is_video: boolean; is_subtitle: boolean }> {
   return invoke('get_file_info', { path });
+}
+
+export async function deleteFiles(paths: string[]): Promise<string[]> {
+  return invoke<string[]>('delete_files', { paths });
 }
 
 export async function detectLanguage(

@@ -2,8 +2,13 @@ mod ffmpeg;
 mod subtitle;
 mod translator;
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 
 use ffmpeg::SubtitleTrack;
 use serde::{Deserialize, Serialize};
@@ -12,7 +17,7 @@ use tauri::{Emitter, Manager};
 
 use translator::{
     ApiFormat, BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
-    TranslationProgress, TranslationSettings,
+    TranslationProgress, TranslationSettings, TRANSLATION_CANCELLED_ERROR,
 };
 
 
@@ -198,16 +203,82 @@ struct StreamingEntryEvent {
     text: String,
 }
 
+#[derive(Default)]
+struct TranslationCancelState {
+    flags: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+}
+
+struct CancelHandle {
+    file_id: String,
+    flags: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    flag: Arc<AtomicBool>,
+}
+
+impl TranslationCancelState {
+    fn register(&self, file_id: &str) -> CancelHandle {
+        let mut flags = self.flags.lock().unwrap();
+        let flag = flags
+            .entry(file_id.to_string())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)))
+            .clone();
+
+        CancelHandle {
+            file_id: file_id.to_string(),
+            flags: Arc::clone(&self.flags),
+            flag,
+        }
+    }
+
+    fn cancel(&self, file_id: &str) {
+        let mut flags = self.flags.lock().unwrap();
+        let flag = flags
+            .entry(file_id.to_string())
+            .or_insert_with(|| Arc::new(AtomicBool::new(false)));
+        flag.store(true, Ordering::Relaxed);
+    }
+
+    fn cancel_all(&self) {
+        let flags = self.flags.lock().unwrap();
+        for flag in flags.values() {
+            flag.store(true, Ordering::Relaxed);
+        }
+    }
+}
+
+impl CancelHandle {
+    fn is_cancelled(&self) -> bool {
+        self.flag.load(Ordering::Relaxed)
+    }
+
+    fn flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.flag)
+    }
+}
+
+impl Drop for CancelHandle {
+    fn drop(&mut self) {
+        if let Ok(mut flags) = self.flags.lock() {
+            flags.remove(&self.file_id);
+        }
+    }
+}
+
 /// Traduz arquivo completo com batching e auto-continue
 #[tauri::command]
 async fn translate_subtitle_full(
     app: tauri::AppHandle,
+    cancel_state: tauri::State<'_, TranslationCancelState>,
     config: LlmConfig,
     system_prompt: String,
     mut file: SubtitleFile,
     settings: TranslationSettings,
     file_id: String,
 ) -> Result<SubtitleTranslationResult, String> {
+    let cancel_handle = cancel_state.register(&file_id);
+    if cancel_handle.is_cancelled() {
+        return Err(TRANSLATION_CANCELLED_ERROR.to_string());
+    }
+
     let client = LlmClient::new(config);
 
     // Extract texts for translation
@@ -225,6 +296,7 @@ async fn translate_subtitle_full(
                 &texts,
                 settings.batch_size,
                 settings.max_retries,
+                Some(cancel_handle.flag()),
                 move |entry| {
                     // Emit event for each translated entry
                     let _ = app_stream.emit("translation:entry", StreamingEntryEvent {
@@ -235,6 +307,10 @@ async fn translate_subtitle_full(
                 },
             )
             .await?;
+
+        if cancel_handle.is_cancelled() {
+            return Err(TRANSLATION_CANCELLED_ERROR.to_string());
+        }
 
         let translated_count = translations.len();
 
@@ -281,6 +357,7 @@ async fn translate_subtitle_full(
             &system_prompt,
             &texts,
             &settings,
+            Some(cancel_handle.flag()),
             move |prog| {
                 let percent = if prog.total_entries > 0 {
                     (prog.translated_entries as f64 / prog.total_entries as f64) * 100.0
@@ -311,6 +388,10 @@ async fn translate_subtitle_full(
         )
         .await?;
 
+    if cancel_handle.is_cancelled() {
+        return Err(TRANSLATION_CANCELLED_ERROR.to_string());
+    }
+
     // Apply translations back
     file.apply_translations(translations);
 
@@ -321,6 +402,24 @@ async fn translate_subtitle_full(
     })
 }
 
+/// Cancela a traduÃ§Ã£o de um arquivo especÃ­fico
+#[tauri::command]
+fn cancel_translation(
+    cancel_state: tauri::State<TranslationCancelState>,
+    file_id: String,
+) -> Result<(), String> {
+    cancel_state.cancel(&file_id);
+    Ok(())
+}
+
+/// Cancela todas as traduÃ§Ãµes em andamento
+#[tauri::command]
+fn cancel_all_translations(
+    cancel_state: tauri::State<TranslationCancelState>,
+) -> Result<(), String> {
+    cancel_state.cancel_all();
+    Ok(())
+}
 
 // ============================================================================
 // Detecção de Idioma
@@ -521,6 +620,10 @@ struct AppSettings {
     mux_title: String,
     #[serde(default)]
     separate_output_dir: String,
+    #[serde(default)]
+    cleanup_extracted_subtitles: bool,
+    #[serde(default)]
+    cleanup_mux_artifacts: bool,
 
     // Interface language
     #[serde(default = "default_language")]
@@ -557,6 +660,8 @@ impl Default for AppSettings {
             mux_language: default_mux_language(),
             mux_title: default_mux_title(),
             separate_output_dir: String::new(),
+            cleanup_extracted_subtitles: false,
+            cleanup_mux_artifacts: false,
             language: default_language(),
         }
     }
@@ -969,9 +1074,46 @@ fn open_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cancel_state_register_and_cancel() {
+        let state = TranslationCancelState::default();
+        let handle = state.register("file-1");
+        assert!(!handle.is_cancelled());
+
+        state.cancel("file-1");
+        assert!(handle.is_cancelled());
+    }
+
+    #[test]
+    fn cancel_state_cancel_before_register() {
+        let state = TranslationCancelState::default();
+        state.cancel("file-2");
+
+        let handle = state.register("file-2");
+        assert!(handle.is_cancelled());
+    }
+
+    #[test]
+    fn cancel_state_cancel_all() {
+        let state = TranslationCancelState::default();
+        let handle_a = state.register("file-a");
+        let handle_b = state.register("file-b");
+
+        state.cancel_all();
+
+        assert!(handle_a.is_cancelled());
+        assert!(handle_b.is_cancelled());
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(TranslationCancelState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
@@ -992,6 +1134,8 @@ pub fn run() {
             translate_subtitle_batch,
             translate_subtitle_full,
             continue_translation,
+            cancel_translation,
+            cancel_all_translations,
             detect_language,
             // Settings
             load_settings,

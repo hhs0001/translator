@@ -36,7 +36,7 @@ export function TranslationPage() {
         <TabsContent value="batch" className="pt-4">
           <div className="space-y-6">
             <FileDropZone />
-            <FileQueue />
+            <FileQueue showCancelAll />
           </div>
         </TabsContent>
       </Tabs>

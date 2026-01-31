@@ -50,7 +50,9 @@
       "files": "files",
       "moreFiles": "+{{count}} file(s) in queue",
       "applyTrackAll": "Apply track to all",
-      "trackForAll": "Track {{index}} for all"
+      "trackForAll": "Track {{index}} for all",
+      "cancelFile": "Cancel translation",
+      "cancelAll": "Cancel all"
     },
     "status": {
       "pending": "Pending",
@@ -60,6 +62,7 @@
       "saving": "Saving",
       "muxing": "Muxing",
       "paused": "Paused",
+      "cancelled": "Cancelled",
       "completed": "Completed",
       "error": "Error"
     },
@@ -160,6 +163,10 @@
       "languageCode": "Language Code",
       "languageCodeHint": "ISO 639-2 code (e.g., por, eng, spa)",
       "trackTitle": "Track Title",
+      "cleanupExtracted": "Remove extracted subtitles after translation",
+      "cleanupExtractedHint": "Deletes temporary subtitles extracted from videos.",
+      "cleanupMux": "Keep only muxed video",
+      "cleanupMuxHint": "Removes translated subtitle files after muxing.",
       "originalFiles": "Original files:",
       "preserved": "Preserved",
       "muxOutputHint": "Subtitles saved as .translated.ass and video muxed as .muxed.mkv",

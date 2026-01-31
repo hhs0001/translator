@@ -21,6 +21,7 @@ const STATUS_CLASSES: Record<FileStatus, string> = {
   saving: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
   muxing: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
   paused: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  cancelled: 'bg-muted text-muted-foreground',
   completed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
   error: 'bg-destructive/15 text-destructive',
 };
@@ -37,10 +38,12 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
   const { t } = useTranslation();
   const removeFile = useTranslationStore((s) => s.removeFile);
   const setSelectedTrack = useTranslationStore((s) => s.setSelectedTrack);
+  const cancelFileTranslation = useTranslationStore((s) => s.cancelFileTranslation);
   const statusLabel = t(`translation.status.${file.status}`);
   const statusClass = STATUS_CLASSES[file.status];
 
   const isProcessing = ['extracting', 'translating', 'detecting_language', 'saving', 'muxing'].includes(file.status);
+  const canCancel = file.status !== 'completed' && file.status !== 'error' && file.status !== 'cancelled';
   const isVideo = file.type === 'video';
   const hasTracks = file.subtitleTracks && file.subtitleTracks.length > 0;
   const noTracks = file.subtitleTracks && file.subtitleTracks.length === 0 && !file.isLoadingTracks;
@@ -130,17 +133,29 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
           </p>
         )}
       </div>
-
-      <Button
-        size="icon-sm"
-        variant="ghost"
-        className="text-destructive hover:text-destructive"
-        onClick={() => removeFile(file.id)}
-        disabled={isProcessing}
-        aria-label={t('translation.removeFile')}
-      >
-        ✕
-      </Button>
+      <div className="flex items-center gap-2">
+        {canCancel && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-destructive/40 text-destructive hover:bg-destructive/10"
+            onClick={() => cancelFileTranslation(file.id)}
+            aria-label={t('translation.queue.cancelFile')}
+          >
+            {t('common.cancel')}
+          </Button>
+        )}
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-destructive hover:text-destructive"
+          onClick={() => removeFile(file.id)}
+          disabled={isProcessing}
+          aria-label={t('translation.removeFile')}
+        >
+          {t('translation.removeFile')}
+        </Button>
+      </div>
     </div>
   );
 });

@@ -3,6 +3,12 @@ use futures::StreamExt;
 use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+
+pub const TRANSLATION_CANCELLED_ERROR: &str = "Translation cancelled";
 
 /// LLM API format
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -292,6 +298,20 @@ pub struct TranslatedEntryEvent {
 
 /// Placeholder for newlines in subtitle text during translation
 const NEWLINE_PLACEHOLDER: &str = "<<NEWLINE>>";
+
+fn is_cancelled(cancel_flag: &Option<Arc<AtomicBool>>) -> bool {
+    cancel_flag
+        .as_ref()
+        .map(|flag| flag.load(Ordering::Relaxed))
+        .unwrap_or(false)
+}
+
+fn check_cancelled(cancel_flag: &Option<Arc<AtomicBool>>) -> Result<(), String> {
+    if is_cancelled(cancel_flag) {
+        return Err(TRANSLATION_CANCELLED_ERROR.to_string());
+    }
+    Ok(())
+}
 
 /// Parses a translation line in the format "INDEX|TEXT" and returns (index, translated_text)
 fn parse_translation_line(line: &str, placeholder: &str) -> Option<(usize, String)> {
@@ -589,6 +609,7 @@ impl LlmClient {
         entries: &[(usize, String)],
         batch_size: usize,
         max_retries: usize,
+        cancel_flag: Option<Arc<AtomicBool>>,
         mut on_entry: impl FnMut(TranslatedEntryEvent),
     ) -> Result<Vec<(usize, String)>, String> {
         // Create map of original indices for ASS tag validation (using references to avoid cloning)
@@ -597,6 +618,7 @@ impl LlmClient {
 
         // Process in batches
         for batch in entries.chunks(batch_size) {
+            check_cancelled(&cancel_flag)?;
             let formatted: String = batch
                 .iter()
                 .map(|(idx, text)| {
@@ -639,6 +661,7 @@ CRITICAL FORMAT INSTRUCTIONS:
             // Retry loop for streaming batch
             let mut attempt = 0;
             let batch_results = loop {
+                check_cancelled(&cancel_flag)?;
                 attempt += 1;
 
                 let response = self
@@ -657,6 +680,7 @@ CRITICAL FORMAT INSTRUCTIONS:
                         if attempt > max_retries {
                             return Err(format!("Translation request failed: {}", e));
                         }
+                        check_cancelled(&cancel_flag)?;
                         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                         continue;
                     }
@@ -668,6 +692,7 @@ CRITICAL FORMAT INSTRUCTIONS:
                     if attempt > max_retries {
                         return Err(format!("Translation API error {}: {}", status, body));
                     }
+                    check_cancelled(&cancel_flag)?;
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     continue;
                 }
@@ -679,6 +704,9 @@ CRITICAL FORMAT INSTRUCTIONS:
                 let mut stream = response.bytes_stream();
 
                 while let Some(chunk_result) = stream.next().await {
+                    if is_cancelled(&cancel_flag) {
+                        return Err(TRANSLATION_CANCELLED_ERROR.to_string());
+                    }
                     let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
                     let chunk_str = String::from_utf8_lossy(&chunk);
                     buffer.push_str(&chunk_str);
@@ -735,6 +763,8 @@ CRITICAL FORMAT INSTRUCTIONS:
                         }
                     }
                 }
+
+                check_cancelled(&cancel_flag)?;
 
                 // Process last line of the batch if any
                 let line_content = current_text.trim().to_string();
@@ -966,6 +996,7 @@ CRITICAL FORMAT INSTRUCTIONS:
         system_prompt: &str,
         entries: &[(usize, String)],
         settings: &TranslationSettings,
+        cancel_flag: Option<Arc<AtomicBool>>,
         mut on_progress: impl FnMut(TranslationProgress),
         mut on_retry: impl FnMut(TranslationRetryInfo),
         mut on_error: impl FnMut(TranslationErrorInfo),
@@ -1001,7 +1032,9 @@ CRITICAL FORMAT INSTRUCTIONS:
         };
 
         // Processa batches em grupos de parallel_requests
+        check_cancelled(&cancel_flag)?;
         while current_batch_group * parallel_requests < total_batches {
+            check_cancelled(&cancel_flag)?;
             let start_idx = current_batch_group * parallel_requests;
             let end_idx = (start_idx + parallel_requests).min(total_batches);
 
@@ -1021,6 +1054,7 @@ CRITICAL FORMAT INSTRUCTIONS:
 
             // Executa batches em paralelo
             let results = join_all(futures).await;
+            check_cancelled(&cancel_flag)?;
 
             // Processa resultados
             let mut last_error: Option<String> = None;
@@ -1042,6 +1076,7 @@ CRITICAL FORMAT INSTRUCTIONS:
             for failed_idx in failed_batches {
                 let mut retries = 0;
                 loop {
+                    check_cancelled(&cancel_flag)?;
                     retries += 1;
 
                     // Calcula progresso atual para callback
@@ -1096,6 +1131,7 @@ CRITICAL FORMAT INSTRUCTIONS:
 
                     // Delay antes de retry
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                    check_cancelled(&cancel_flag)?;
 
                     // Tenta novamente
                     let batch = batches[failed_idx].clone();

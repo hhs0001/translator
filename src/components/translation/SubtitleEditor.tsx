@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { QueueFile } from '../../types';
 import { SubtitleLine } from './SubtitleLine';
@@ -15,6 +16,7 @@ interface Props {
 function SubtitleEditorBase({ file }: Props) {
   const { t } = useTranslation();
   const updateFile = useTranslationStore((s) => s.updateFile);
+  const cancelFileTranslation = useTranslationStore((s) => s.cancelFileTranslation);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const entries = file.originalSubtitle?.entries || [];
@@ -31,6 +33,7 @@ function SubtitleEditorBase({ file }: Props) {
       ? Math.round((translatedCount / entries.length) * 100)
       : 0
   ), [entries.length, translatedCount]);
+  const canCancel = file.status !== 'completed' && file.status !== 'error' && file.status !== 'cancelled';
 
   const handleTranslationChange = useCallback((index: number, newText: string) => {
     const current = translatedRef.current;
@@ -72,14 +75,27 @@ function SubtitleEditorBase({ file }: Props) {
             {file.originalSubtitle?.format.toUpperCase()} • {entries.length} {t('translation.editor.lines')}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-sm font-medium">{progress}%</p>
-          <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className="text-sm font-medium">{progress}%</p>
+            <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
           </div>
+          {canCancel && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-destructive/40 text-destructive hover:bg-destructive/10"
+              onClick={() => cancelFileTranslation(file.id)}
+              aria-label={t('translation.queue.cancelFile')}
+            >
+              {t('common.cancel')}
+            </Button>
+          )}
         </div>
       </div>
 
