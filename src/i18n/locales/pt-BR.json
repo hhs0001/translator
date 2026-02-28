@@ -182,5 +182,30 @@
       "label": "Idioma da Interface",
       "hint": "Selecione o idioma da interface do aplicativo"
     }
+  },
+  "logMessages": {
+    "filesAdded": "{{count}} arquivo(s) adicionado(s) à fila",
+    "trackSelectedForAll": "Faixa {{index}} selecionada para todos os vídeos",
+    "startingTranslation": "Iniciando tradução...",
+    "translationPaused": "Tradução pausada",
+    "translationResumed": "Tradução retomada",
+    "translationStopped": "Tradução interrompida",
+    "translationCancelledFor": "Tradução cancelada para {{fileName}}",
+    "translationCancelledForAll": "Tradução cancelada para todos os arquivos.",
+    "allFilesProcessed": "Todos os arquivos foram processados!",
+    "extractingSubtitle": "Extraindo legenda de {{fileName}}...",
+    "detectingTargetLanguage": "Detectando idioma alvo do prompt...",
+    "targetLanguageDetected": "Idioma alvo detectado: {{language}}",
+    "couldNotDetectLanguage": "Não foi possível detectar idioma: {{error}}. Usando configuração padrão.",
+    "translatingFile": "Traduzindo {{fileName}} ({{lines}} linhas)...",
+    "partialTranslation": "Tradução parcial, continuando...",
+    "subtitleSaved": "Legenda salva em: {{path}}",
+    "doingMux": "Fazendo mux de {{fileName}}...",
+    "muxedVideoSaved": "Vídeo muxado salvo em: {{path}}",
+    "tempFilesRemoved": "Arquivos temporários removidos ({{count}}).",
+    "failedToRemoveTempFiles": "Falha ao remover arquivos temporários: {{error}}",
+    "fileProcessed": "{{fileName}} processado com sucesso!",
+    "errorProcessing": "Erro ao processar {{fileName}}: {{error}}",
+    "errorInFile": "Erro em {{fileName}} (tentativa {{attempt}}): {{error}}"
   }
 }

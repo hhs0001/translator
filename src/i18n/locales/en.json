@@ -182,5 +182,30 @@
       "label": "Interface Language",
       "hint": "Select the language for the application interface"
     }
+  },
+  "logMessages": {
+    "filesAdded": "{{count}} file(s) added to queue",
+    "trackSelectedForAll": "Track {{index}} selected for all videos",
+    "startingTranslation": "Starting translation...",
+    "translationPaused": "Translation paused",
+    "translationResumed": "Translation resumed",
+    "translationStopped": "Translation stopped",
+    "translationCancelledFor": "Translation cancelled for {{fileName}}",
+    "translationCancelledForAll": "Translation cancelled for all files.",
+    "allFilesProcessed": "All files processed!",
+    "extractingSubtitle": "Extracting subtitle from {{fileName}}...",
+    "detectingTargetLanguage": "Detecting target language from prompt...",
+    "targetLanguageDetected": "Target language detected: {{language}}",
+    "couldNotDetectLanguage": "Could not detect language: {{error}}. Using default configuration.",
+    "translatingFile": "Translating {{fileName}} ({{lines}} lines)...",
+    "partialTranslation": "Partial translation, continuing...",
+    "subtitleSaved": "Subtitle saved at: {{path}}",
+    "doingMux": "Muxing {{fileName}}...",
+    "muxedVideoSaved": "Muxed video saved at: {{path}}",
+    "tempFilesRemoved": "Temporary files removed ({{count}}).",
+    "failedToRemoveTempFiles": "Failed to remove temporary files: {{error}}",
+    "fileProcessed": "{{fileName}} processed successfully!",
+    "errorProcessing": "Error processing {{fileName}}: {{error}}",
+    "errorInFile": "Error in {{fileName}} (attempt {{attempt}}): {{error}}"
   }
 }

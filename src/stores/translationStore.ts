@@ -1,23 +1,25 @@
-import { create } from 'zustand';
-import { QueueFile, FileStatus } from '../types';
-import { useLogsStore } from './logsStore';
-import { useSettingsStore } from './settingsStore';
-import * as TauriUtils from '../utils/tauri';
-import { listen } from '@tauri-apps/api/event';
-import { useEffect } from 'react';
+import { create } from "zustand";
+import i18n from "../i18n";
+import { QueueFile, FileStatus } from "../types";
+import { useLogsStore } from "./logsStore";
+import { useSettingsStore } from "./settingsStore";
+import * as TauriUtils from "../utils/tauri";
+import { listen } from "@tauri-apps/api/event";
+import { useEffect } from "react";
 
 // Debounce timing constant for progress updates (in milliseconds)
 const PROGRESS_FLUSH_DELAY_MS = 50;
-const CANCELLATION_ERROR_MESSAGE = 'Translation cancelled';
+const CANCELLATION_ERROR_MESSAGE = "Translation cancelled";
 const PROCESSING_STATUSES: FileStatus[] = [
-  'extracting',
-  'translating',
-  'detecting_language',
-  'saving',
-  'muxing',
+  "extracting",
+  "translating",
+  "detecting_language",
+  "saving",
+  "muxing",
 ];
 
-const isProcessingStatus = (status: FileStatus) => PROCESSING_STATUSES.includes(status);
+const isProcessingStatus = (status: FileStatus) =>
+  PROCESSING_STATUSES.includes(status);
 
 // Module-level map to track translated indices per file (for streaming mode)
 // This is kept outside the hook to persist across re-renders but allow cleanup on file removal
@@ -39,11 +41,12 @@ interface TranslationState {
   isTranslating: boolean;
   isPaused: boolean;
 
-  addFiles: (files: { name: string; path: string; type: 'subtitle' | 'video' }[]) => void;
+  addFiles: (
+    files: { name: string; path: string; type: "subtitle" | "video" }[],
+  ) => void;
   removeFile: (id: string) => void;
   clearQueue: () => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
-
   updateFile: (id: string, updates: Partial<QueueFile>) => void;
   bulkUpdateFiles: (updates: Record<string, Partial<QueueFile>>) => void;
   setFileStatus: (id: string, status: FileStatus, error?: string) => void;
@@ -57,13 +60,15 @@ interface TranslationState {
   stopTranslation: () => void;
   cancelFileTranslation: (id: string) => Promise<void>;
   cancelAllTranslations: () => Promise<void>;
-
   processNextFile: () => Promise<void>;
   translateFile: (file: QueueFile) => Promise<void>;
 }
 
 function hasFileChanges(file: QueueFile, updates: Partial<QueueFile>) {
-  for (const [key, value] of Object.entries(updates) as [keyof QueueFile, QueueFile[keyof QueueFile]][]) {
+  for (const [key, value] of Object.entries(updates) as [
+    keyof QueueFile,
+    QueueFile[keyof QueueFile],
+  ][]) {
     if (file[key] !== value) return true;
   }
   return false;
@@ -81,19 +86,26 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       name: f.name,
       path: f.path,
       type: f.type,
-      status: 'pending',
+      status: "pending",
       progress: 0,
       totalLines: 0,
       translatedLines: 0,
-      isLoadingTracks: f.type === 'video',
+      isLoadingTracks: f.type === "video",
     }));
     set((state) => ({ queue: [...state.queue, ...newFiles] }));
-    useLogsStore.getState().addLog('info', `${files.length} arquivo(s) adicionado(s) à fila`);
-    
-    // Carregar faixas de legenda para vídeos
-    newFiles.filter(f => f.type === 'video').forEach(f => {
-      get().loadVideoTracks(f.id);
-    });
+    useLogsStore
+      .getState()
+      .addLog(
+        "info",
+        i18n.t("logMessages.filesAdded", { count: files.length }),
+      );
+
+    // Load subtitle tracks for videos
+    newFiles
+      .filter((f) => f.type === "video")
+      .forEach((f) => {
+        get().loadVideoTracks(f.id);
+      });
   },
 
   removeFile: (id) => {
@@ -156,31 +168,36 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
   setAllVideoTracks: (trackIndex) => {
     const updates: Record<string, Partial<QueueFile>> = {};
     for (const file of get().queue) {
-      if (file.type === 'video' && file.selectedTrackIndex !== trackIndex) {
+      if (file.type === "video" && file.selectedTrackIndex !== trackIndex) {
         updates[file.id] = { selectedTrackIndex: trackIndex };
       }
     }
     if (Object.keys(updates).length > 0) {
       get().bulkUpdateFiles(updates);
     }
-    useLogsStore.getState().addLog('info', `Faixa ${trackIndex + 1} selecionada para todos os vídeos`);
+    useLogsStore
+      .getState()
+      .addLog(
+        "info",
+        i18n.t("logMessages.trackSelectedForAll", { index: trackIndex + 1 }),
+      );
   },
 
   loadVideoTracks: async (id) => {
     const { queue, updateFile } = get();
     const file = queue.find((f) => f.id === id);
-    if (!file || file.type !== 'video') return;
+    if (!file || file.type !== "video") return;
 
     updateFile(id, { isLoadingTracks: true });
     try {
       const tracks = await TauriUtils.listVideoSubtitleTracks(file.path);
-      updateFile(id, { 
-        subtitleTracks: tracks, 
+      updateFile(id, {
+        subtitleTracks: tracks,
         isLoadingTracks: false,
-        selectedTrackIndex: tracks.length > 0 ? 0 : undefined
+        selectedTrackIndex: tracks.length > 0 ? 0 : undefined,
       });
     } catch (error) {
-      console.error('Failed to load tracks:', error);
+      console.error("Failed to load tracks:", error);
       updateFile(id, { subtitleTracks: [], isLoadingTracks: false });
     }
   },
@@ -190,30 +207,43 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     if (queue.length === 0) return;
 
     set({ isTranslating: true, isPaused: false });
-    useLogsStore.getState().addLog('info', 'Iniciando tradução...');
+    useLogsStore
+      .getState()
+      .addLog("info", i18n.t("logMessages.startingTranslation"));
     await get().processNextFile();
   },
 
   pauseTranslation: () => {
     set({ isPaused: true });
-    useLogsStore.getState().addLog('warning', 'Tradução pausada');
+    useLogsStore
+      .getState()
+      .addLog("warning", i18n.t("logMessages.translationPaused"));
   },
 
   resumeTranslation: () => {
     set({ isPaused: false });
-    useLogsStore.getState().addLog('info', 'Tradução retomada');
+    useLogsStore
+      .getState()
+      .addLog("info", i18n.t("logMessages.translationResumed"));
     get().processNextFile();
   },
 
   stopTranslation: () => {
     set({ isTranslating: false, isPaused: false, currentFileId: null });
-    useLogsStore.getState().addLog('warning', 'Tradução interrompida');
+    useLogsStore
+      .getState()
+      .addLog("warning", i18n.t("logMessages.translationStopped"));
   },
 
   cancelFileTranslation: async (id) => {
     const { queue, updateFile } = get();
     const file = queue.find((f) => f.id === id);
-    if (!file || file.status === 'completed' || file.status === 'error' || file.status === 'cancelled') {
+    if (
+      !file ||
+      file.status === "completed" ||
+      file.status === "error" ||
+      file.status === "cancelled"
+    ) {
       return;
     }
 
@@ -221,18 +251,24 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       try {
         await TauriUtils.cancelTranslation(id);
       } catch (error) {
-        console.warn('Failed to cancel translation:', error);
+        console.warn("Failed to cancel translation:", error);
       }
     }
 
-    updateFile(id, { status: 'cancelled' });
-    useLogsStore.getState().addLog('warning', `TraduÃ§Ã£o cancelada para ${file.name}`, file.name);
+    updateFile(id, { status: "cancelled" });
+    useLogsStore
+      .getState()
+      .addLog(
+        "warning",
+        i18n.t("logMessages.translationCancelledFor", { fileName: file.name }),
+        file.name,
+      );
   },
 
   cancelAllTranslations: async () => {
     const { queue, bulkUpdateFiles } = get();
     const targets = queue.filter(
-      (file) => file.status === 'pending' || isProcessingStatus(file.status)
+      (file) => file.status === "pending" || isProcessingStatus(file.status),
     );
 
     if (targets.length === 0) return;
@@ -240,17 +276,19 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     try {
       await TauriUtils.cancelAllTranslations();
     } catch (error) {
-      console.warn('Failed to cancel all translations:', error);
+      console.warn("Failed to cancel all translations:", error);
     }
 
     const updates: Record<string, Partial<QueueFile>> = {};
     for (const file of targets) {
-      updates[file.id] = { status: 'cancelled' };
+      updates[file.id] = { status: "cancelled" };
     }
 
     bulkUpdateFiles(updates);
     set({ isTranslating: false, isPaused: false, currentFileId: null });
-    useLogsStore.getState().addLog('warning', 'TraduÃ§Ã£o cancelada para todos os arquivos.');
+    useLogsStore
+      .getState()
+      .addLog("warning", i18n.t("logMessages.translationCancelledForAll"));
   },
 
   processNextFile: async () => {
@@ -258,19 +296,19 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     if (!isTranslating || isPaused) return;
 
     const settings = useSettingsStore.getState().settings;
-    const pendingFiles = queue.filter((f) => f.status === 'pending');
+    const pendingFiles = queue.filter((f) => f.status === "pending");
 
     if (pendingFiles.length === 0) {
       set({ isTranslating: false, currentFileId: null });
-      useLogsStore.getState().addLog('success', 'Todos os arquivos foram processados!');
+      useLogsStore
+        .getState()
+        .addLog("success", i18n.t("logMessages.allFilesProcessed"));
       return;
     }
 
     const filesToProcess = pendingFiles.slice(0, settings.concurrency);
 
-    await Promise.all(
-      filesToProcess.map((file) => get().translateFile(file))
-    );
+    await Promise.all(filesToProcess.map((file) => get().translateFile(file)));
 
     if (get().isTranslating && !get().isPaused) {
       await get().processNextFile();
@@ -281,8 +319,12 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
     const { updateFile, setFileStatus } = get();
     const settings = useSettingsStore.getState().settings;
     const logs = useLogsStore.getState();
-    const headersObj = settings.headers.reduce((acc, h) => ({ ...acc, [h.key]: h.value }), {} as Record<string, string>);
-    const isCancelled = () => get().queue.find((f) => f.id === file.id)?.status === 'cancelled';
+    const headersObj = settings.headers.reduce(
+      (acc, h) => ({ ...acc, [h.key]: h.value }),
+      {} as Record<string, string>,
+    );
+    const isCancelled = () =>
+      get().queue.find((f) => f.id === file.id)?.status === "cancelled";
 
     try {
       set({ currentFileId: file.id });
@@ -290,14 +332,24 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
 
       let subtitlePath = file.path;
       let extractedSubtitlePath: string | null = null;
-      if (file.type === 'video') {
-        setFileStatus(file.id, 'extracting');
-        logs.addLog('info', `Extraindo legenda de ${file.name}...`, file.name);
+      if (file.type === "video") {
+        setFileStatus(file.id, "extracting");
+        logs.addLog(
+          "info",
+          i18n.t("logMessages.extractingSubtitle", { fileName: file.name }),
+          file.name,
+        );
 
         const trackIndex = file.selectedTrackIndex ?? 0;
-        // Gera o path de saída baseado no vídeo original
-        const outputSubtitlePath = file.path.replace(/\.[^/.]+$/, '.extracted.ass');
-        await TauriUtils.extractSubtitleTrack(file.path, trackIndex, outputSubtitlePath);
+        const outputSubtitlePath = file.path.replace(
+          /\.[^/.]+$/,
+          ".extracted.ass",
+        );
+        await TauriUtils.extractSubtitleTrack(
+          file.path,
+          trackIndex,
+          outputSubtitlePath,
+        );
         subtitlePath = outputSubtitlePath;
         extractedSubtitlePath = outputSubtitlePath;
         updateFile(file.id, { extractedSubtitlePath: subtitlePath });
@@ -311,13 +363,16 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       });
       if (isCancelled()) return;
 
-      // Detectar idioma alvo antes de traduzir (se modelo de detecção configurado)
       let muxLanguage = settings.muxLanguage;
       let muxTitle = settings.muxTitle;
 
       if (settings.languageDetectionModel) {
-        setFileStatus(file.id, 'detecting_language');
-        logs.addLog('info', `Detectando idioma alvo do prompt...`, file.name);
+        setFileStatus(file.id, "detecting_language");
+        logs.addLog(
+          "info",
+          i18n.t("logMessages.detectingTargetLanguage"),
+          file.name,
+        );
 
         try {
           const detected = await TauriUtils.detectLanguage(
@@ -326,21 +381,40 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
             settings.apiFormat,
             settings.languageDetectionModel,
             settings.prompt,
-            headersObj
+            headersObj,
           );
 
           updateFile(file.id, { detectedLanguage: detected });
           muxLanguage = detected.code;
           muxTitle = detected.displayName;
-          logs.addLog('info', `Idioma alvo detectado: ${detected.displayName}`, file.name);
+          logs.addLog(
+            "info",
+            i18n.t("logMessages.targetLanguageDetected", {
+              language: detected.displayName,
+            }),
+            file.name,
+          );
         } catch (langError) {
-          logs.addLog('warning', `Não foi possível detectar idioma: ${langError}. Usando configuração padrão.`, file.name);
+          logs.addLog(
+            "warning",
+            i18n.t("logMessages.couldNotDetectLanguage", {
+              error: String(langError),
+            }),
+            file.name,
+          );
         }
       }
 
       if (isCancelled()) return;
-      setFileStatus(file.id, 'translating');
-      logs.addLog('info', `Traduzindo ${file.name} (${subtitle.entries.length} linhas)...`, file.name);
+      setFileStatus(file.id, "translating");
+      logs.addLog(
+        "info",
+        i18n.t("logMessages.translatingFile", {
+          fileName: file.name,
+          lines: subtitle.entries.length,
+        }),
+        file.name,
+      );
 
       const model = settings.customModel || settings.model;
       const result = await TauriUtils.translateSubtitleFull(
@@ -359,7 +433,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
           continueOnError: settings.continueOnError,
           maxRetries: settings.maxRetries,
           streaming: settings.streaming,
-        }
+        },
       );
 
       if (isCancelled()) return;
@@ -370,44 +444,57 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       });
 
       if (result.progress.isPartial && settings.autoContinue) {
-        logs.addLog('warning', `Tradução parcial, continuando...`, file.name);
+        logs.addLog(
+          "warning",
+          i18n.t("logMessages.partialTranslation"),
+          file.name,
+        );
       }
 
-      // Salvar arquivo de legenda traduzido
-      setFileStatus(file.id, 'saving');
-      
-      // Determina o path de saída
+      setFileStatus(file.id, "saving");
+
       let outputSubtitlePath: string;
       if (settings.separateOutputDir) {
-        const fileName = file.name.replace(/\.[^/.]+$/, '.translated.ass');
+        const fileName = file.name.replace(/\.[^/.]+$/, ".translated.ass");
         outputSubtitlePath = `${settings.separateOutputDir}/${fileName}`;
       } else {
-        const basePath = file.type === 'video' ? file.path : subtitlePath;
-        outputSubtitlePath = basePath.replace(/\.[^/.]+$/, '.translated.ass');
+        const basePath = file.type === "video" ? file.path : subtitlePath;
+        outputSubtitlePath = basePath.replace(/\.[^/.]+$/, ".translated.ass");
       }
-      
+
       await TauriUtils.saveSubtitle(outputSubtitlePath, result.file);
       updateFile(file.id, { outputSubtitlePath });
-      logs.addLog('info', `Legenda salva em: ${outputSubtitlePath}`, file.name);
+      logs.addLog(
+        "info",
+        i18n.t("logMessages.subtitleSaved", { path: outputSubtitlePath }),
+        file.name,
+      );
       if (isCancelled()) return;
 
-      // Fazer mux se configurado e for um vídeo
-      if (settings.outputMode === 'mux' && file.type === 'video') {
-        setFileStatus(file.id, 'muxing');
-        logs.addLog('info', `Fazendo mux de ${file.name}...`, file.name);
-        
-        const outputVideoPath = file.path.replace(/\.[^/.]+$/, '.muxed.mkv');
-        
+      if (settings.outputMode === "mux" && file.type === "video") {
+        setFileStatus(file.id, "muxing");
+        logs.addLog(
+          "info",
+          i18n.t("logMessages.doingMux", { fileName: file.name }),
+          file.name,
+        );
+
+        const outputVideoPath = file.path.replace(/\.[^/.]+$/, ".muxed.mkv");
+
         await TauriUtils.muxSubtitleToVideo(
           file.path,
           outputSubtitlePath,
           outputVideoPath,
           muxLanguage,
-          muxTitle
+          muxTitle,
         );
-        
+
         updateFile(file.id, { outputVideoPath });
-        logs.addLog('success', `Vídeo muxado salvo em: ${outputVideoPath}`, file.name);
+        logs.addLog(
+          "success",
+          i18n.t("logMessages.muxedVideoSaved", { path: outputVideoPath }),
+          file.name,
+        );
       }
 
       const cleanupPaths = new Set<string>();
@@ -415,7 +502,11 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         cleanupPaths.add(extractedSubtitlePath);
       }
 
-      if (settings.cleanupMuxArtifacts && settings.outputMode === 'mux' && file.type === 'video') {
+      if (
+        settings.cleanupMuxArtifacts &&
+        settings.outputMode === "mux" &&
+        file.type === "video"
+      ) {
         cleanupPaths.add(outputSubtitlePath);
         if (extractedSubtitlePath) {
           cleanupPaths.add(extractedSubtitlePath);
@@ -425,29 +516,58 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       if (cleanupPaths.size > 0) {
         try {
           await TauriUtils.deleteFiles([...cleanupPaths]);
-          logs.addLog('info', `Arquivos temporarios removidos (${cleanupPaths.size}).`, file.name);
+          logs.addLog(
+            "info",
+            i18n.t("logMessages.tempFilesRemoved", {
+              count: cleanupPaths.size,
+            }),
+            file.name,
+          );
         } catch (cleanupError) {
-          const message = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-          logs.addLog('warning', `Falha ao remover arquivos temporarios: ${message}`, file.name);
+          const message =
+            cleanupError instanceof Error
+              ? cleanupError.message
+              : String(cleanupError);
+          logs.addLog(
+            "warning",
+            i18n.t("logMessages.failedToRemoveTempFiles", { error: message }),
+            file.name,
+          );
         }
       }
 
       if (isCancelled()) return;
-      setFileStatus(file.id, 'completed');
-      logs.addLog('success', `${file.name} processado com sucesso!`, file.name);
-
+      setFileStatus(file.id, "completed");
+      logs.addLog(
+        "success",
+        i18n.t("logMessages.fileProcessed", { fileName: file.name }),
+        file.name,
+      );
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       const alreadyCancelled = isCancelled();
       if (alreadyCancelled || errorMsg.includes(CANCELLATION_ERROR_MESSAGE)) {
         if (!alreadyCancelled) {
-          setFileStatus(file.id, 'cancelled');
-          logs.addLog('warning', `TraduÃ§Ã£o cancelada para ${file.name}`, file.name);
+          setFileStatus(file.id, "cancelled");
+          logs.addLog(
+            "warning",
+            i18n.t("logMessages.translationCancelledFor", {
+              fileName: file.name,
+            }),
+            file.name,
+          );
         }
         return;
       }
-      setFileStatus(file.id, 'error', errorMsg);
-      logs.addLog('error', `Erro ao processar ${file.name}: ${errorMsg}`, file.name);
+      setFileStatus(file.id, "error", errorMsg);
+      logs.addLog(
+        "error",
+        i18n.t("logMessages.errorProcessing", {
+          fileName: file.name,
+          error: errorMsg,
+        }),
+        file.name,
+      );
 
       if (!settings.continueOnError) {
         get().pauseTranslation();
@@ -461,8 +581,10 @@ export function useTranslationEvents() {
     let unlistenProgress: (() => void) | null = null;
     let unlistenError: (() => void) | null = null;
     let unlistenEntry: (() => void) | null = null;
-    const pendingProgress = new Map<string, { progress: number; translated: number; total: number }>();
-    // Map of pending entries for update (fileId -> index -> text)
+    const pendingProgress = new Map<
+      string,
+      { progress: number; translated: number; total: number }
+    >();
     const pendingEntries = new Map<string, Map<number, string>>();
     let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -472,10 +594,9 @@ export function useTranslationEvents() {
       const store = useTranslationStore.getState();
       const updates: Record<string, Partial<QueueFile>> = {};
 
-      // Process progress updates (batch mode)
       for (const [fileId, payload] of pendingProgress.entries()) {
         const file = store.queue.find((entry) => entry.id === fileId);
-        if (!file || file.status === 'cancelled') continue;
+        if (!file || file.status === "cancelled") continue;
         updates[fileId] = {
           progress: payload.progress,
           translatedLines: payload.translated,
@@ -484,37 +605,37 @@ export function useTranslationEvents() {
       }
       pendingProgress.clear();
 
-      // Process streaming entry updates
       for (const [fileId, entries] of pendingEntries.entries()) {
-        const file = store.queue.find(f => f.id === fileId);
-        if (file && file.status !== 'cancelled' && file.originalSubtitle) {
-          // Initialize the translated indices set if it doesn't exist
+        const file = store.queue.find((f) => f.id === fileId);
+        if (file && file.status !== "cancelled" && file.originalSubtitle) {
           if (!translatedIndicesMap.has(fileId)) {
             translatedIndicesMap.set(fileId, new Set());
           }
           const indices = translatedIndicesMap.get(fileId)!;
           const originalEntries = file.originalSubtitle.entries;
 
-          // Create index -> position map for O(1) lookup
           const indexToPosition = new Map<number, number>();
           for (let i = 0; i < originalEntries.length; i++) {
             indexToPosition.set(originalEntries[i].index, i);
           }
 
-          // Update translated entries
-          const currentTranslated = file.translatedEntries ? [...file.translatedEntries] : [];
+          const currentTranslated = file.translatedEntries
+            ? [...file.translatedEntries]
+            : [];
           for (const [index, text] of entries) {
             const entryIndex = indexToPosition.get(index);
             if (entryIndex === undefined) continue;
 
-            const baseEntry = currentTranslated[entryIndex] ?? originalEntries[entryIndex];
+            const baseEntry =
+              currentTranslated[entryIndex] ?? originalEntries[entryIndex];
             currentTranslated[entryIndex] = { ...baseEntry, text };
             indices.add(index);
           }
 
           const total = file.totalLines || originalEntries.length;
           const translatedCount = indices.size;
-          const progressPercent = total > 0 ? (translatedCount / total) * 100 : 0;
+          const progressPercent =
+            total > 0 ? (translatedCount / total) * 100 : 0;
 
           updates[fileId] = {
             ...updates[fileId],
@@ -538,43 +659,55 @@ export function useTranslationEvents() {
 
     const setupListeners = async () => {
       try {
-        unlistenProgress = await listen<{ fileId: string; progress: number; translated: number; total: number }>(
-          'translation:progress',
-          (event) => {
-            const { fileId, progress, translated, total } = event.payload;
-            pendingProgress.set(fileId, { progress, translated, total });
-            // Clear translated indices when a new file starts or progress is reset
-            if (translated === 0) {
-              translatedIndicesMap.delete(fileId);
-            }
-            scheduleFlush();
+        unlistenProgress = await listen<{
+          fileId: string;
+          progress: number;
+          translated: number;
+          total: number;
+        }>("translation:progress", (event) => {
+          const { fileId, progress, translated, total } = event.payload;
+          pendingProgress.set(fileId, { progress, translated, total });
+          if (translated === 0) {
+            translatedIndicesMap.delete(fileId);
           }
-        );
+          scheduleFlush();
+        });
 
-        unlistenError = await listen<{ fileId: string; error: string; retryCount: number }>(
-          'translation:error',
-          (event) => {
-            const { fileId, error, retryCount } = event.payload;
-            const file = useTranslationStore.getState().queue.find(f => f.id === fileId);
-            const fileName = file?.name || 'file';
-            useLogsStore.getState().addLog('warning', `Error in ${fileName} (attempt ${retryCount}): ${error}`, fileName);
-          }
-        );
+        unlistenError = await listen<{
+          fileId: string;
+          error: string;
+          retryCount: number;
+        }>("translation:error", (event) => {
+          const { fileId, error, retryCount } = event.payload;
+          const file = useTranslationStore
+            .getState()
+            .queue.find((f) => f.id === fileId);
+          const fileName = file?.name || "file";
+          useLogsStore.getState().addLog(
+            "warning",
+            i18n.t("logMessages.errorInFile", {
+              fileName,
+              attempt: retryCount,
+              error,
+            }),
+            fileName,
+          );
+        });
 
-        // Listener for streaming individual entries
-        unlistenEntry = await listen<{ fileId: string; index: number; text: string }>(
-          'translation:entry',
-          (event) => {
-            const { fileId, index, text } = event.payload;
-            if (!pendingEntries.has(fileId)) {
-              pendingEntries.set(fileId, new Map());
-            }
-            pendingEntries.get(fileId)!.set(index, text);
-            scheduleFlush();
+        unlistenEntry = await listen<{
+          fileId: string;
+          index: number;
+          text: string;
+        }>("translation:entry", (event) => {
+          const { fileId, index, text } = event.payload;
+          if (!pendingEntries.has(fileId)) {
+            pendingEntries.set(fileId, new Map());
           }
-        );
+          pendingEntries.get(fileId)!.set(index, text);
+          scheduleFlush();
+        });
       } catch (error) {
-        console.error('Failed to setup translation event listeners:', error);
+        console.error("Failed to setup translation event listeners:", error);
       }
     };
 
@@ -587,8 +720,6 @@ export function useTranslationEvents() {
       unlistenProgress?.();
       unlistenError?.();
       unlistenEntry?.();
-      // Note: We don't clear translatedIndicesMap here since it's managed at module level
-      // and cleaned up when files are removed from the queue
     };
   }, []);
 }
