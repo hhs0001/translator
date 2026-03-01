@@ -20,7 +20,20 @@ Translator é um app desktop para traduzir arquivos de legenda (e legendas embut
 - Legendas: SRT, ASS, SSA (VTT em breve).
 - Vídeos: MKV, MP4, AVI (extração de legendas via FFmpeg).
 
-## Requisitos
+## Download
+
+Binários pré-compilados para todas as plataformas estão disponíveis na página de [Releases](https://github.com/hhs0001/translator/releases).
+
+### Plataformas suportadas
+
+| Plataforma | Arquitetura | Arquivo |
+|------------|-------------|---------|
+| Windows | x64 | instalador `.exe` |
+| macOS | ARM64 (Apple Silicon) | `.app` |
+| macOS | x64 (Intel) | `.app` |
+| Linux | AMD64 | `.deb` |
+
+## Requisitos (para desenvolvimento)
 
 - **Bun** (recomendado) ou outro gerenciador Node.js.
 - **Rust + Tauri CLI** para builds desktop.
@@ -48,7 +61,19 @@ bun run tauri build
 
 ## Estrutura do projeto
 
-```text
+```
 src/           # UI em React (configurações, tradução, editor)
 src-tauri/     # Backend Tauri (FFmpeg, parser de legenda, chamadas LLM)
 ```
+
+## CI/CD
+
+Este projeto usa GitHub Actions para builds e releases automatizados:
+
+- **Lint & Type Check**: Executado em todo PR para validar qualidade do código
+- **Test Build**: Compila o app para todas as plataformas sem fazer release
+- **Release**: Cria automaticamente releases com binários para todas as plataformas
+
+Para criar uma nova release, atualize a versão no `package.json` e faça merge para a branch `release`.
+
+Para mais detalhes, veja [.github/README.md](.github/README.md).

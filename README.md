@@ -20,7 +20,20 @@ Translator is a desktop app for translating subtitle files (and subtitles embedd
 - Subtitle files: SRT, ASS, SSA (VTT planned).
 - Video files: MKV, MP4, AVI (subtitle extraction via FFmpeg).
 
-## Requirements
+## Download
+
+Pre-built binaries for all platforms are available on the [Releases page](https://github.com/hhs0001/translator/releases).
+
+### Supported Platforms
+
+| Platform | Architecture | File |
+|----------|--------------|------|
+| Windows | x64 | `.exe` installer |
+| macOS | ARM64 (Apple Silicon) | `.app` |
+| macOS | x64 (Intel) | `.app` |
+| Linux | AMD64 | `.deb` |
+
+## Requirements (for development)
 
 - **Bun** (recommended) or another Node.js package manager.
 - **Rust + Tauri CLI** for desktop builds.
@@ -48,7 +61,19 @@ bun run tauri build
 
 ## Project structure
 
-```text
+```
 src/           # React UI (settings, translation flow, editor)
 src-tauri/     # Tauri backend (FFmpeg, subtitle parsing, LLM calls)
 ```
+
+## CI/CD
+
+This project uses GitHub Actions for automated builds and releases:
+
+- **Lint & Type Check**: Runs on every PR to validate code quality
+- **Test Build**: Compiles the app for all platforms without releasing
+- **Release**: Automatically creates releases with binaries for all platforms
+
+To create a new release, update the version in `package.json` and merge to the `release` branch.
+
+For more details, see [.github/README.md](.github/README.md).
