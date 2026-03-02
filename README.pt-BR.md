@@ -26,12 +26,12 @@ Binários pré-compilados para todas as plataformas estão disponíveis na pági
 
 ### Plataformas suportadas
 
-| Plataforma | Arquitetura | Arquivo |
-|------------|-------------|---------|
-| Windows | x64 | instalador `.exe` |
-| macOS | ARM64 (Apple Silicon) | `.app` |
-| macOS | x64 (Intel) | `.app` |
-| Linux | AMD64 | `.deb` |
+| Plataforma | Arquitetura           | Arquivo           |
+| ---------- | --------------------- | ----------------- |
+| Windows    | x64                   | instalador `.exe` |
+| macOS      | ARM64 (Apple Silicon) | `.app`            |
+| macOS      | x64 (Intel)           | `.app`            |
+| Linux      | AMD64                 | `.deb`            |
 
 ## Requisitos (para desenvolvimento)
 
@@ -75,5 +75,3 @@ Este projeto usa GitHub Actions para builds e releases automatizados:
 - **Release**: Cria automaticamente releases com binários para todas as plataformas
 
 Para criar uma nova release, atualize a versão no `package.json` e faça merge para a branch `release`.
-
-Para mais detalhes, veja [.github/README.md](.github/README.md).
