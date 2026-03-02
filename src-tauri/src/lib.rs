@@ -20,7 +20,6 @@ use translator::{
     TranslationProgress, TranslationSettings, TRANSLATION_CANCELLED_ERROR,
 };
 
-
 // ============================================================================
 // Comandos de Legendas
 // ============================================================================
@@ -153,7 +152,6 @@ struct SubtitleTranslationResult {
     progress: TranslationProgress,
     error_message: Option<String>,
 }
-
 
 /// Traduz um lote específico de legendas (para continue functionality)
 #[tauri::command]
@@ -299,11 +297,14 @@ async fn translate_subtitle_full(
                 Some(cancel_handle.flag()),
                 move |entry| {
                     // Emit event for each translated entry
-                    let _ = app_stream.emit("translation:entry", StreamingEntryEvent {
-                        file_id: file_id_stream.clone(),
-                        index: entry.index,
-                        text: entry.text,
-                    });
+                    let _ = app_stream.emit(
+                        "translation:entry",
+                        StreamingEntryEvent {
+                            file_id: file_id_stream.clone(),
+                            index: entry.index,
+                            text: entry.text,
+                        },
+                    );
                 },
             )
             .await?;
@@ -320,18 +321,25 @@ async fn translate_subtitle_full(
         let progress = TranslationProgress {
             total_entries: total,
             translated_entries: translated_count,
-            last_translated_index: if translated_count > 0 { translated_count - 1 } else { 0 },
+            last_translated_index: if translated_count > 0 {
+                translated_count - 1
+            } else {
+                0
+            },
             is_partial: translated_count < total,
             can_continue: translated_count < total,
         };
 
         // Emit final progress
-        let _ = app.emit("translation:progress", ProgressEvent {
-            file_id: file_id.clone(),
-            progress: 100.0,
-            translated: translated_count,
-            total,
-        });
+        let _ = app.emit(
+            "translation:progress",
+            ProgressEvent {
+                file_id: file_id.clone(),
+                progress: 100.0,
+                translated: translated_count,
+                total,
+            },
+        );
 
         return Ok(SubtitleTranslationResult {
             file,
@@ -364,26 +372,35 @@ async fn translate_subtitle_full(
                 } else {
                     0.0
                 };
-                let _ = app_progress.emit("translation:progress", ProgressEvent {
-                    file_id: file_id_progress.clone(),
-                    progress: percent,
-                    translated: prog.translated_entries,
-                    total: prog.total_entries,
-                });
+                let _ = app_progress.emit(
+                    "translation:progress",
+                    ProgressEvent {
+                        file_id: file_id_progress.clone(),
+                        progress: percent,
+                        translated: prog.translated_entries,
+                        total: prog.total_entries,
+                    },
+                );
             },
             move |retry| {
-                let _ = app_retry.emit("translation:error", ErrorEvent {
-                    file_id: file_id_retry.clone(),
-                    error: retry.error_message.clone(),
-                    retry_count: retry.attempt,
-                });
+                let _ = app_retry.emit(
+                    "translation:error",
+                    ErrorEvent {
+                        file_id: file_id_retry.clone(),
+                        error: retry.error_message.clone(),
+                        retry_count: retry.attempt,
+                    },
+                );
             },
             move |error| {
-                let _ = app.emit("translation:error", ErrorEvent {
-                    file_id: file_id_error.clone(),
-                    error: error.error_message.clone(),
-                    retry_count: 0,
-                });
+                let _ = app.emit(
+                    "translation:error",
+                    ErrorEvent {
+                        file_id: file_id_error.clone(),
+                        error: error.error_message.clone(),
+                        retry_count: 0,
+                    },
+                );
             },
         )
         .await?;
@@ -510,8 +527,12 @@ Examples:
         display_name: String,
     }
 
-    let lang: LangResponse = serde_json::from_str(&json_str)
-        .map_err(|e| format!("Failed to parse language detection response: {}. Response was: {}", e, response))?;
+    let lang: LangResponse = serde_json::from_str(&json_str).map_err(|e| {
+        format!(
+            "Failed to parse language detection response: {}. Response was: {}",
+            e, response
+        )
+    })?;
 
     Ok(DetectedLanguage {
         code: lang.code,
@@ -564,7 +585,6 @@ async fn continue_translation(
         error_message: None,
     })
 }
-
 
 // ============================================================================
 // Settings da UI
@@ -762,8 +782,8 @@ async fn load_settings(app: tauri::AppHandle) -> Result<AppSettings, String> {
         return Ok(AppSettings::default());
     }
 
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read settings: {}", e))?;
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read settings: {}", e))?;
     let settings: AppSettings =
         serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {}", e))?;
 
@@ -783,7 +803,6 @@ async fn save_settings(app: tauri::AppHandle, settings: AppSettings) -> Result<(
 // ============================================================================
 // Prompt Templates
 // ============================================================================
-
 
 /// Prompt template structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1127,7 +1146,7 @@ pub fn run() {
             list_video_subtitle_tracks,
             extract_subtitle_track,
             mux_subtitle_to_video,
-// Tradução
+            // Tradução
             list_llm_models,
             translate_subtitle,
             translate_text,
@@ -1143,7 +1162,6 @@ pub fn run() {
             // Templates
             load_templates,
             save_templates,
-
             add_template,
             delete_template,
             update_template,

@@ -36,7 +36,6 @@ pub struct LlmConfig {
     pub headers: Vec<(String, String)>,
 }
 
-
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
@@ -55,7 +54,8 @@ fn detect_api_format(endpoint: &str, configured_format: &ApiFormat) -> ApiFormat
     }
 
     let lower = endpoint.to_lowercase();
-    if lower.contains("anthropic") || lower.ends_with("/messages") || lower.contains("/v1/messages") {
+    if lower.contains("anthropic") || lower.ends_with("/messages") || lower.contains("/v1/messages")
+    {
         ApiFormat::Anthropic
     } else {
         ApiFormat::OpenAI
@@ -125,7 +125,6 @@ fn strip_think_blocks(input: &str) -> String {
     }
     output
 }
-
 
 impl Default for TranslationSettings {
     fn default() -> Self {
@@ -424,10 +423,8 @@ impl LlmClient {
             }
             ApiFormat::OpenAI | ApiFormat::Auto => {
                 if !self.config.api_key.trim().is_empty() {
-                    builder = builder.header(
-                        "Authorization",
-                        format!("Bearer {}", self.config.api_key),
-                    );
+                    builder =
+                        builder.header("Authorization", format!("Bearer {}", self.config.api_key));
                 }
             }
         }
@@ -481,7 +478,10 @@ impl LlmClient {
         subtitle_content: &str,
     ) -> Result<String, String> {
         match self.config.api_format {
-            ApiFormat::Anthropic => self.translate_anthropic(system_prompt, subtitle_content).await,
+            ApiFormat::Anthropic => {
+                self.translate_anthropic(system_prompt, subtitle_content)
+                    .await
+            }
             ApiFormat::OpenAI | ApiFormat::Auto => {
                 self.translate_openai(system_prompt, subtitle_content).await
             }
@@ -613,7 +613,8 @@ impl LlmClient {
         mut on_entry: impl FnMut(TranslatedEntryEvent),
     ) -> Result<Vec<(usize, String)>, String> {
         // Create map of original indices for ASS tag validation (using references to avoid cloning)
-        let original_map: HashMap<usize, &str> = entries.iter().map(|(i, s)| (*i, s.as_str())).collect();
+        let original_map: HashMap<usize, &str> =
+            entries.iter().map(|(i, s)| (*i, s.as_str())).collect();
         let mut all_results = Vec::new();
 
         // Process in batches
@@ -642,7 +643,11 @@ CRITICAL FORMAT INSTRUCTIONS:
    Example input:  5|It's a special event{}that everyone attends
    Example output: 5|É um evento especial{}que todos participam
 4. Do NOT remove, split, or modify {} markers - they indicate where line breaks occur in the subtitle display."#,
-                system_prompt, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER
+                system_prompt,
+                NEWLINE_PLACEHOLDER,
+                NEWLINE_PLACEHOLDER,
+                NEWLINE_PLACEHOLDER,
+                NEWLINE_PLACEHOLDER
             );
 
             let full_content = format!("{}\n\n{}", instruction, formatted);
@@ -729,12 +734,20 @@ CRITICAL FORMAT INSTRUCTIONS:
                                             for ch in content.chars() {
                                                 if ch == '\n' {
                                                     // End of a line - try to parse
-                                                    let line_content = current_text.trim().to_string();
-                                                    if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
+                                                    let line_content =
+                                                        current_text.trim().to_string();
+                                                    if let Some((idx, text)) =
+                                                        parse_translation_line(
+                                                            &line_content,
+                                                            NEWLINE_PLACEHOLDER,
+                                                        )
+                                                    {
                                                         // Validate ASS tag compatibility
                                                         let should_emit = original_map
                                                             .get(&idx)
-                                                            .map(|orig| Self::tags_compatible(orig, &text))
+                                                            .map(|orig| {
+                                                                Self::tags_compatible(orig, &text)
+                                                            })
                                                             .unwrap_or(true);
 
                                                         if should_emit {
@@ -756,7 +769,10 @@ CRITICAL FORMAT INSTRUCTIONS:
                                 Err(e) => {
                                     // Log invalid JSON chunks in debug mode for troubleshooting
                                     #[cfg(debug_assertions)]
-                                    eprintln!("Failed to parse SSE chunk: {} - JSON: {}", e, json_str);
+                                    eprintln!(
+                                        "Failed to parse SSE chunk: {} - JSON: {}",
+                                        e, json_str
+                                    );
                                     let _ = e; // Suppress unused warning in release
                                 }
                             }
@@ -768,7 +784,9 @@ CRITICAL FORMAT INSTRUCTIONS:
 
                 // Process last line of the batch if any
                 let line_content = current_text.trim().to_string();
-                if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
+                if let Some((idx, text)) =
+                    parse_translation_line(&line_content, NEWLINE_PLACEHOLDER)
+                {
                     let should_emit = original_map
                         .get(&idx)
                         .map(|orig| Self::tags_compatible(orig, &text))
@@ -805,7 +823,7 @@ CRITICAL FORMAT INSTRUCTIONS:
     ) -> Result<Vec<(usize, String)>, String> {
         // Placeholder para quebras de linha - único o suficiente para não aparecer em texto normal
         const NEWLINE_PLACEHOLDER: &str = "<<NEWLINE>>";
-        
+
         // Formata as legendas para envio
         // Formato: INDEX|TEXTO (para preservar mapeamento)
         // Converte \N (ASS) e \n (real) para placeholder para evitar confusão com quebras de linha reais
@@ -832,7 +850,11 @@ CRITICAL FORMAT INSTRUCTIONS:
    Example input:  5|It's a special event{}that everyone attends
    Example output: 5|É um evento especial{}que todos participam
 4. Do NOT remove, split, or modify {} markers - they indicate where line breaks occur in the subtitle display."#,
-            system_prompt, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER, NEWLINE_PLACEHOLDER
+            system_prompt,
+            NEWLINE_PLACEHOLDER,
+            NEWLINE_PLACEHOLDER,
+            NEWLINE_PLACEHOLDER,
+            NEWLINE_PLACEHOLDER
         );
 
         let response = self.translate(&instruction, &formatted).await?;
@@ -1016,11 +1038,7 @@ CRITICAL FORMAT INSTRUCTIONS:
 
         let build_progress = |translations: &Vec<(usize, String)>| -> TranslationProgress {
             let translated_entries = translations.len();
-            let last_translated_index = translations
-                .iter()
-                .map(|(idx, _)| *idx)
-                .max()
-                .unwrap_or(0);
+            let last_translated_index = translations.iter().map(|(idx, _)| *idx).max().unwrap_or(0);
             let is_partial = translated_entries < total;
             TranslationProgress {
                 total_entries: total,
@@ -1164,11 +1182,8 @@ CRITICAL FORMAT INSTRUCTIONS:
         }
 
         // Coleta e ordena todas as traduções
-        let mut all_translations: Vec<(usize, String)> = batch_results
-            .into_iter()
-            .flatten()
-            .flatten()
-            .collect();
+        let mut all_translations: Vec<(usize, String)> =
+            batch_results.into_iter().flatten().flatten().collect();
         all_translations.sort_by_key(|(idx, _)| *idx);
 
         let progress = build_progress(&all_translations);
@@ -1178,7 +1193,6 @@ CRITICAL FORMAT INSTRUCTIONS:
             error_message: None,
         })
     }
-
 }
 
 #[cfg(test)]
