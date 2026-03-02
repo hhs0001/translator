@@ -52,8 +52,8 @@ pub fn parse(content: &str) -> Result<SubtitleFile, String> {
             }
             "events" => {
                 // Captura o formato dos diálogos
-                if line.starts_with("Format:") {
-                    dialogue_format = line["Format:".len()..]
+                if let Some(format_part) = line.strip_prefix("Format:") {
+                    dialogue_format = format_part
                         .split(',')
                         .map(|s| s.trim().to_lowercase())
                         .collect();

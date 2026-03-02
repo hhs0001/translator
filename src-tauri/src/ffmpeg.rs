@@ -10,6 +10,7 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Cria um Command que não abre janela de terminal no Windows
 fn create_command(program: &str) -> Command {
+    #[allow(unused_mut)]
     let mut cmd = Command::new(program);
     #[cfg(windows)]
     cmd.creation_flags(CREATE_NO_WINDOW);

@@ -72,18 +72,16 @@ fn normalize_endpoint_for_format(endpoint: &str, format: &ApiFormat) -> String {
         ApiFormat::Anthropic => {
             if trimmed.ends_with("/messages") {
                 trimmed.to_string()
-            } else if trimmed.ends_with("/v1") {
-                format!("{}/messages", trimmed)
             } else {
+                // Add /messages suffix (works for both /v1 and other endpoints)
                 format!("{}/messages", trimmed)
             }
         }
         ApiFormat::OpenAI | ApiFormat::Auto => {
             if trimmed.ends_with("/chat/completions") {
                 trimmed.to_string()
-            } else if trimmed.ends_with("/v1") {
-                format!("{}/chat/completions", trimmed)
             } else {
+                // Add /chat/completions suffix (works for both /v1 and other endpoints)
                 format!("{}/chat/completions", trimmed)
             }
         }
@@ -142,24 +140,13 @@ impl Default for TranslationSettings {
 /// Progress tracking for translation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub struct TranslationProgress {
     pub total_entries: usize,
     pub translated_entries: usize,
     pub last_translated_index: usize,
     pub is_partial: bool,
     pub can_continue: bool,
-}
-
-impl Default for TranslationProgress {
-    fn default() -> Self {
-        Self {
-            total_entries: 0,
-            translated_entries: 0,
-            last_translated_index: 0,
-            is_partial: false,
-            can_continue: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1013,6 +1000,7 @@ CRITICAL FORMAT INSTRUCTIONS:
     }
 
     /// Traduz todas as legendas em batches, com suporte a paralelismo e auto-continue
+    #[allow(clippy::too_many_arguments)]
     pub async fn translate_all_batched(
         &self,
         system_prompt: &str,
