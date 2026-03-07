@@ -23,6 +23,33 @@ pub enum ApiFormat {
     Auto,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ReasoningEffort {
+    #[default]
+    Default,
+    None,
+    Minimal,
+    Low,
+    Medium,
+    High,
+    Xhigh,
+}
+
+impl ReasoningEffort {
+    fn as_api_value(&self) -> Option<&'static str> {
+        match self {
+            Self::Default => None,
+            Self::None => Some("none"),
+            Self::Minimal => Some("minimal"),
+            Self::Low => Some("low"),
+            Self::Medium => Some("medium"),
+            Self::High => Some("high"),
+            Self::Xhigh => Some("xhigh"),
+        }
+    }
+}
+
 /// LLM client configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +61,12 @@ pub struct LlmConfig {
     pub api_format: ApiFormat,
     #[serde(default)]
     pub headers: Vec<(String, String)>,
+    #[serde(default)]
+    pub reasoning_effort: ReasoningEffort,
+    #[serde(default)]
+    pub anthropic_thinking_enabled: bool,
+    #[serde(default = "default_anthropic_thinking_budget_tokens")]
+    pub anthropic_thinking_budget_tokens: u32,
 }
 
 impl Default for LlmConfig {
@@ -44,8 +77,15 @@ impl Default for LlmConfig {
             model: "gemini-2.5-pro".to_string(),
             api_format: ApiFormat::default(),
             headers: Vec::new(),
+            reasoning_effort: ReasoningEffort::default(),
+            anthropic_thinking_enabled: false,
+            anthropic_thinking_budget_tokens: default_anthropic_thinking_budget_tokens(),
         }
     }
+}
+
+fn default_anthropic_thinking_budget_tokens() -> u32 {
+    1024
 }
 
 fn detect_api_format(endpoint: &str, configured_format: &ApiFormat) -> ApiFormat {
@@ -212,6 +252,8 @@ struct ChatRequest {
     messages: Vec<ChatMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -239,6 +281,15 @@ struct AnthropicRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     system: Option<String>,
     messages: Vec<AnthropicMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thinking: Option<AnthropicThinkingRequest>,
+}
+
+#[derive(Debug, Serialize)]
+struct AnthropicThinkingRequest {
+    #[serde(rename = "type")]
+    thinking_type: String,
+    budget_tokens: u32,
 }
 
 #[derive(Debug, Serialize)]
@@ -254,7 +305,10 @@ struct AnthropicResponse {
 
 #[derive(Debug, Deserialize)]
 struct AnthropicContent {
-    text: String,
+    #[serde(rename = "type")]
+    content_type: String,
+    #[serde(default)]
+    text: Option<String>,
 }
 
 // Streaming response structs (OpenAI SSE format)
@@ -497,6 +551,11 @@ impl LlmClient {
             model: self.config.model.clone(),
             messages,
             stream: Some(false),
+            reasoning_effort: self
+                .config
+                .reasoning_effort
+                .as_api_value()
+                .map(str::to_string),
         };
 
         let response = self
@@ -550,12 +609,28 @@ impl LlmClient {
 
         let request = AnthropicRequest {
             model: self.config.model.clone(),
-            max_tokens: 8192,
+            max_tokens: if self.config.anthropic_thinking_enabled {
+                self.config
+                    .anthropic_thinking_budget_tokens
+                    .max(1024)
+                    .saturating_add(4096)
+                    .max(8192)
+            } else {
+                8192
+            },
             system,
             messages: vec![AnthropicMessage {
                 role: "user".to_string(),
                 content: user_content,
             }],
+            thinking: if self.config.anthropic_thinking_enabled {
+                Some(AnthropicThinkingRequest {
+                    thinking_type: "enabled".to_string(),
+                    budget_tokens: self.config.anthropic_thinking_budget_tokens.max(1024),
+                })
+            } else {
+                None
+            },
         };
 
         let response = self
@@ -582,8 +657,14 @@ impl LlmClient {
 
         anthropic_response
             .content
-            .first()
-            .map(|c| c.text.clone())
+            .iter()
+            .find_map(|c| {
+                if c.content_type == "text" {
+                    c.text.clone()
+                } else {
+                    None
+                }
+            })
             .ok_or_else(|| "No response from model".to_string())
     }
 
@@ -648,6 +729,11 @@ CRITICAL FORMAT INSTRUCTIONS:
                 model: self.config.model.clone(),
                 messages,
                 stream: Some(true),
+                reasoning_effort: self
+                    .config
+                    .reasoning_effort
+                    .as_api_value()
+                    .map(str::to_string),
             };
 
             // Retry loop for streaming batch

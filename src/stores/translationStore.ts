@@ -433,6 +433,9 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
           continueOnError: settings.continueOnError,
           maxRetries: settings.maxRetries,
           streaming: settings.streaming,
+          reasoningEffort: settings.reasoningEffort,
+          anthropicThinkingEnabled: settings.anthropicThinkingEnabled,
+          anthropicThinkingBudgetTokens: settings.anthropicThinkingBudgetTokens,
         },
       );
 

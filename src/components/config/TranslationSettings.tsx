@@ -10,8 +10,13 @@ export function TranslationSettings() {
   const { t } = useTranslation();
   const { settings, updateSetting } = useSettingsStore();
 
-  // Streaming is only supported with OpenAI-compatible APIs (not direct Anthropic)
-  const isAnthropicDirect = settings.apiFormat === 'anthropic';
+  const lowerBaseUrl = settings.baseUrl.trim().toLowerCase();
+  const isAnthropicDirect = settings.apiFormat === 'anthropic' || (
+    settings.apiFormat === 'auto' &&
+    (lowerBaseUrl.includes('anthropic') ||
+      lowerBaseUrl.endsWith('/messages') ||
+      lowerBaseUrl.includes('/v1/messages'))
+  );
   const streamingDisabled = isAnthropicDirect;
 
   const handleBatchSelect = (value: string) => {
@@ -27,6 +32,13 @@ export function TranslationSettings() {
     const num = parseInt(value, 10);
     if (!isNaN(num) && num >= 0) {
       updateSetting(field, num);
+    }
+  };
+
+  const handleAnthropicBudgetInput = (value: string) => {
+    const num = parseInt(value, 10);
+    if (!isNaN(num) && num >= 1024) {
+      updateSetting('anthropicThinkingBudgetTokens', num);
     }
   };
 
@@ -116,6 +128,72 @@ export function TranslationSettings() {
             max={10}
           />
         </div>
+
+        {isAnthropicDirect ? (
+          <>
+            <div>
+              <label className="block text-sm font-medium mb-1">{t('settings.translationSettings.anthropicThinking')}</label>
+              <Select
+                value={settings.anthropicThinkingEnabled ? 'enabled' : 'disabled'}
+                onValueChange={(value) => updateSetting('anthropicThinkingEnabled', value === 'enabled')}
+              >
+                <Label className="sr-only">{t('settings.translationSettings.anthropicThinking')}</Label>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t('common.select')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="disabled">{t('settings.translationSettings.thinkingDisabled')}</SelectItem>
+                  <SelectItem value="enabled">{t('settings.translationSettings.thinkingEnabled')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t('settings.translationSettings.anthropicThinkingHint')}
+              </p>
+            </div>
+
+            {settings.anthropicThinkingEnabled && (
+              <div>
+                <label className="block text-sm font-medium mb-1">{t('settings.translationSettings.anthropicThinkingBudget')}</label>
+                <Input
+                  type="number"
+                  value={String(settings.anthropicThinkingBudgetTokens || 1024)}
+                  onChange={(e) => handleAnthropicBudgetInput(e.target.value)}
+                  className="w-32"
+                  min={1024}
+                  step={256}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t('settings.translationSettings.anthropicThinkingBudgetHint')}
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div>
+            <label className="block text-sm font-medium mb-1">{t('settings.translationSettings.thinkingMode')}</label>
+            <Select
+              value={settings.reasoningEffort}
+              onValueChange={(value) => updateSetting('reasoningEffort', value as typeof settings.reasoningEffort)}
+            >
+              <Label className="sr-only">{t('settings.translationSettings.thinkingMode')}</Label>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={t('common.select')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">{t('settings.translationSettings.thinkingDefault')}</SelectItem>
+                <SelectItem value="none">{t('settings.translationSettings.thinkingNone')}</SelectItem>
+                <SelectItem value="minimal">{t('settings.translationSettings.thinkingMinimal')}</SelectItem>
+                <SelectItem value="low">{t('settings.translationSettings.thinkingLow')}</SelectItem>
+                <SelectItem value="medium">{t('settings.translationSettings.thinkingMedium')}</SelectItem>
+                <SelectItem value="high">{t('settings.translationSettings.thinkingHigh')}</SelectItem>
+                <SelectItem value="xhigh">{t('settings.translationSettings.thinkingXHigh')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('settings.translationSettings.thinkingModeHint')}
+            </p>
+          </div>
+        )}
 
         <div className="space-y-3 pt-2">
           <div className="flex items-center gap-2">

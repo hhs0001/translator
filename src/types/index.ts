@@ -4,6 +4,7 @@
 
 export type ApiFormat = 'openai' | 'anthropic' | 'auto';
 export type Language = 'en' | 'pt-BR';
+export type ReasoningEffort = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface AppSettings {
   // API
@@ -29,6 +30,9 @@ export interface AppSettings {
   maxRetries: number;
   concurrency: number;
   streaming: boolean;  // Streaming de traduções conforme chegam da API
+  reasoningEffort: ReasoningEffort;
+  anthropicThinkingEnabled: boolean;
+  anthropicThinkingBudgetTokens: number;
 
   // Saída
   outputMode: 'mux' | 'separate';
@@ -65,6 +69,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxRetries: 3,
   concurrency: 1,
   streaming: false,
+  reasoningEffort: 'default',
+  anthropicThinkingEnabled: false,
+  anthropicThinkingBudgetTokens: 1024,
   outputMode: 'separate',
   muxLanguage: 'por',
   muxTitle: 'Portuguese',
