@@ -44,6 +44,12 @@ export interface AppSettings {
 
   // Interface language
   language: Language;
+
+  // Text Cleaner (remoção de ruído visual de legendas ASS)
+  textCleanerEnabled: boolean;
+  textCleanerPreserveBasicFormatting: boolean;
+  textCleanerTagsToRemove: string[];
+  textCleanerIgnoredStyles: string[];
 }
 
 export interface Header {
@@ -79,6 +85,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cleanupExtractedSubtitles: false,
   cleanupMuxArtifacts: false,
   language: 'en',
+  textCleanerEnabled: false,
+  textCleanerPreserveBasicFormatting: true,
+  textCleanerTagsToRemove: [],
+  textCleanerIgnoredStyles: ['draw'],
 };
 
 // ============================================
@@ -232,6 +242,44 @@ export interface LogEntry {
   message: string;
   file?: string;
   details?: string;
+}
+
+// ============================================
+// TEXT CLEANER
+// ============================================
+
+export interface TextCleanerConfig {
+  enabled: boolean;
+  preserveBasicFormatting: boolean;
+  tagsToRemove: string[];
+  ignoredStyles: string[];
+  preserveKaraokeTiming: boolean;
+  preservePositioning: boolean;
+}
+
+export const DEFAULT_TEXT_CLEANER_CONFIG: TextCleanerConfig = {
+  enabled: false,
+  preserveBasicFormatting: true,
+  tagsToRemove: [],
+  ignoredStyles: ['draw'],
+  preserveKaraokeTiming: false,
+  preservePositioning: false,
+};
+
+export interface AssClutterAnalysis {
+  totalLines: number;
+  linesWithEffects: number;
+  linesWithKaraoke: number;
+  linesWithPositioning: number;
+  styleCounts: Record<string, number>;
+  estimatedTokensSaved: number;
+}
+
+export interface CleanedTextPreview {
+  index: number;
+  original: string;
+  cleaned: string;
+  shouldSkip: boolean;
 }
 
 // ============================================

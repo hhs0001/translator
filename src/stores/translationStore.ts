@@ -477,6 +477,16 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       );
 
       const model = settings.customModel || settings.model;
+      // Prepara configuração do text cleaner se habilitado
+      const textCleanerConfig = settings.textCleanerEnabled ? {
+        enabled: true,
+        preserveBasicFormatting: settings.textCleanerPreserveBasicFormatting,
+        tagsToRemove: settings.textCleanerTagsToRemove,
+        ignoredStyles: settings.textCleanerIgnoredStyles,
+        preserveKaraokeTiming: false,
+        preservePositioning: false,
+      } : undefined;
+
       const result = await TauriUtils.translateSubtitleFull(
         subtitle,
         settings.prompt,
@@ -496,6 +506,7 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
           reasoningEffort: settings.reasoningEffort,
           anthropicThinkingEnabled: settings.anthropicThinkingEnabled,
           anthropicThinkingBudgetTokens: settings.anthropicThinkingBudgetTokens,
+          textCleanerConfig,
         },
       );
 

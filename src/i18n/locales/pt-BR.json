@@ -205,6 +205,22 @@
       "title": "Idioma",
       "label": "Idioma da Interface",
       "hint": "Selecione o idioma da interface do aplicativo"
+    },
+    "textCleaner": {
+      "title": "Limpeza de Texto",
+      "enabled": "Habilitar Text Cleaner",
+      "enabledHint": "Ativa a limpeza automatica de tags ASS",
+      "preserveBasic": "Preservar formatacao basica",
+      "preserveBasicHint": "Mantem negrito (\\b), italico (\\i), sublinhado (\\u)",
+      "ignoredStyles": "Estilos ignorados",
+      "ignoredStylesHint": "Linhas com estes estilos nao serao enviadas para traducao",
+      "customTags": "Tags personalizadas para remover",
+      "customTagsHint": "Alem das tags visuais padrao, tambem remove estas tags especificas",
+      "visualTagsTitle": "Tags visuais sempre removidas:",
+      "visualTagsHint": "Estas tags controlam posicionamento, cores, rotacao, escala, sombras, etc.",
+      "whatItDoes": "O que isso faz?",
+      "whatItDoesDescription": "Legendas de anime frequentemente contem efeitos visuais complexos (posicionamento, karaoke, cores, rotacoes) que poluem o texto enviado a IA. O Text Cleaner extrai apenas o texto puro para traducao e reaplica os efeitos depois.",
+      "tokenSavings": "Isso economiza tokens e evita que a IA tente traduzir codigos de efeito."
     }
   },
   "logMessages": {

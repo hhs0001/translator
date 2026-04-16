@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { AppSettings, SubtitleTranslationResult, DetectedLanguage, ApiFormat } from '../types';
-import { Template, LLMModel, SubtitleFile, SubtitleTrack } from '../types';
+import { Template, LLMModel, SubtitleFile, SubtitleTrack, TextCleanerConfig, AssClutterAnalysis, CleanedTextPreview } from '../types';
 
 export async function loadSettings(): Promise<AppSettings> {
   return invoke<AppSettings>('load_settings');
@@ -83,6 +83,7 @@ export interface TranslationOptions {
   reasoningEffort: AppSettings['reasoningEffort'];
   anthropicThinkingEnabled: boolean;
   anthropicThinkingBudgetTokens: number;
+  textCleanerConfig?: TextCleanerConfig;
 }
 
 export async function translateSubtitleFull(
@@ -118,6 +119,7 @@ export async function translateSubtitleFull(
       streaming: options.streaming,
     },
     fileId,
+    textCleanerConfig: options.textCleanerConfig,
   });
 }
 
@@ -171,4 +173,25 @@ export async function getAppDataDir(): Promise<string> {
 
 export async function openFolder(path: string): Promise<void> {
   return invoke('open_folder', { path });
+}
+
+// ============================================
+// TEXT CLEANER
+// ============================================
+
+export async function analyzeSubtitleClutter(file: SubtitleFile): Promise<AssClutterAnalysis> {
+  return invoke<AssClutterAnalysis>('analyze_subtitle_clutter', { file });
+}
+
+export async function previewCleanedText(
+  file: SubtitleFile, 
+  config: TextCleanerConfig
+): Promise<CleanedTextPreview[]> {
+  return invoke<[number, string, string, boolean][]>('preview_cleaned_text', { file, config })
+    .then(results => results.map(([index, original, cleaned, shouldSkip]) => ({
+      index,
+      original,
+      cleaned,
+      shouldSkip
+    })));
 }

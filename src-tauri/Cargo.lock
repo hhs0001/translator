@@ -4398,6 +4398,7 @@ version = "0.1.0"
 dependencies = [
  "encoding_rs",
  "futures",
+ "once_cell",
  "regex",
  "reqwest",
  "serde",

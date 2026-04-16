@@ -1,5 +1,6 @@
 mod ffmpeg;
 mod subtitle;
+mod text_cleaner;
 mod translator;
 
 use std::collections::HashMap;
@@ -19,6 +20,7 @@ use translator::{
     ApiFormat, BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
     TranslationProgress, TranslationSettings, TRANSLATION_CANCELLED_ERROR,
 };
+use text_cleaner::{TextCleanerConfig, clean_subtitle_entries, reapply_all_tags};
 
 // ============================================================================
 // Comandos de Legendas
@@ -271,6 +273,7 @@ async fn translate_subtitle_full(
     mut file: SubtitleFile,
     settings: TranslationSettings,
     file_id: String,
+    text_cleaner_config: Option<TextCleanerConfig>,
 ) -> Result<SubtitleTranslationResult, String> {
     let cancel_handle = cancel_state.register(&file_id);
     if cancel_handle.is_cancelled() {
@@ -279,9 +282,26 @@ async fn translate_subtitle_full(
 
     let client = LlmClient::new(config);
 
-    // Extract texts for translation
-    let texts = file.extract_texts();
-    let total = texts.len();
+    // Configuração do text cleaner
+    let cleaner_config = text_cleaner_config.unwrap_or_default();
+    let use_cleaner = cleaner_config.enabled;
+
+    // Prepara dados para tradução (com ou sem limpeza)
+    let (texts_to_translate, cleaned_data, total) = if use_cleaner {
+        // Extrai textos com metadados de estilo para limpeza
+        let entries_with_style: Vec<(usize, String, Option<String>)> = file.entries.iter()
+            .map(|e| (e.index, e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+            .collect();
+        
+        let cleaned = clean_subtitle_entries(&entries_with_style, &cleaner_config);
+        let total = cleaned.mappings.len();
+        let texts: Vec<(usize, String)> = cleaned.texts_to_translate.clone();
+        (texts, Some(cleaned), total)
+    } else {
+        let texts = file.extract_texts();
+        let total = texts.len();
+        (texts, None, total)
+    };
 
     // If streaming is enabled, use streaming mode
     if settings.streaming {
@@ -291,7 +311,7 @@ async fn translate_subtitle_full(
         let translations = client
             .translate_subtitles_streaming(
                 &system_prompt,
-                &texts,
+                &texts_to_translate,
                 settings.batch_size,
                 settings.parallel_requests,
                 settings.max_retries,
@@ -316,8 +336,16 @@ async fn translate_subtitle_full(
 
         let translated_count = translations.len();
 
+        // Reaplica tags se usou cleaner, senão aplica normal
+        let final_translations = if let Some(ref cleaned) = cleaned_data {
+            let translations_map: std::collections::HashMap<usize, String> = translations.into_iter().collect();
+            reapply_all_tags(cleaned, &translations_map, &cleaner_config)
+        } else {
+            translations
+        };
+
         // Apply translations back
-        file.apply_translations(translations);
+        file.apply_translations(final_translations);
 
         let progress = TranslationProgress {
             total_entries: total,
@@ -364,7 +392,7 @@ async fn translate_subtitle_full(
     } = client
         .translate_all_batched(
             &system_prompt,
-            &texts,
+            &texts_to_translate,
             &settings,
             Some(cancel_handle.flag()),
             move |prog| {
@@ -410,8 +438,16 @@ async fn translate_subtitle_full(
         return Err(TRANSLATION_CANCELLED_ERROR.to_string());
     }
 
+    // Reaplica tags se usou cleaner, senão aplica normal
+    let final_translations = if let Some(ref cleaned) = cleaned_data {
+        let translations_map: std::collections::HashMap<usize, String> = translations.into_iter().collect();
+        reapply_all_tags(cleaned, &translations_map, &cleaner_config)
+    } else {
+        translations
+    };
+
     // Apply translations back
-    file.apply_translations(translations);
+    file.apply_translations(final_translations);
 
     Ok(SubtitleTranslationResult {
         file,
@@ -588,6 +624,42 @@ async fn continue_translation(
 }
 
 // ============================================================================
+// Análise de Legendas (Text Cleaner)
+// ============================================================================
+
+/// Análise de "lixo" em arquivo ASS
+#[tauri::command]
+async fn analyze_subtitle_clutter(file: SubtitleFile) -> Result<text_cleaner::AssClutterAnalysis, String> {
+    use text_cleaner::analyze_ass_clutter;
+    
+    let entries: Vec<(String, Option<String>)> = file.entries.iter()
+        .map(|e| (e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+        .collect();
+    
+    Ok(analyze_ass_clutter(&entries))
+}
+
+/// Pre-visualização de texto limpo (para debug/verificação)
+#[tauri::command]
+async fn preview_cleaned_text(
+    file: SubtitleFile,
+    config: TextCleanerConfig,
+) -> Result<Vec<(usize, String, String, bool)>, String> {
+    // (index, original, cleaned, should_skip)
+    let entries: Vec<(usize, String, Option<String>)> = file.entries.iter()
+        .map(|e| (e.index, e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+        .collect();
+    
+    let cleaned = clean_subtitle_entries(&entries, &config);
+    
+    let result = cleaned.mappings.iter()
+        .map(|m| (m.entry_index, m.original_text.clone(), m.clean_text.clone(), m.should_skip_translation))
+        .collect();
+    
+    Ok(result)
+}
+
+// ============================================================================
 // Settings da UI
 // ============================================================================
 
@@ -655,6 +727,16 @@ struct AppSettings {
     // Interface language
     #[serde(default = "default_language")]
     language: String,
+
+    // Text Cleaner (remoção de "lixo" de legendas ASS)
+    #[serde(default)]
+    text_cleaner_enabled: bool,
+    #[serde(default = "default_text_cleaner_preserve_basic")]
+    text_cleaner_preserve_basic_formatting: bool,
+    #[serde(default)]
+    text_cleaner_tags_to_remove: Vec<String>,
+    #[serde(default = "default_text_cleaner_ignored_styles")]
+    text_cleaner_ignored_styles: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -693,6 +775,10 @@ impl Default for AppSettings {
             cleanup_extracted_subtitles: false,
             cleanup_mux_artifacts: false,
             language: default_language(),
+            text_cleaner_enabled: false,
+            text_cleaner_preserve_basic_formatting: true,
+            text_cleaner_tags_to_remove: Vec::new(),
+            text_cleaner_ignored_styles: vec!["draw".to_string()],
         }
     }
 }
@@ -743,6 +829,14 @@ fn default_mux_title() -> String {
 
 fn default_language() -> String {
     "en".to_string()
+}
+
+fn default_text_cleaner_preserve_basic() -> bool {
+    true
+}
+
+fn default_text_cleaner_ignored_styles() -> Vec<String> {
+    vec!["draw".to_string()]
 }
 
 fn get_settings_path(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
@@ -1170,6 +1264,9 @@ pub fn run() {
             cancel_translation,
             cancel_all_translations,
             detect_language,
+            // Text Cleaner
+            analyze_subtitle_clutter,
+            preview_cleaned_text,
             // Settings
             load_settings,
             save_settings,

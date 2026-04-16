@@ -205,6 +205,22 @@
       "title": "Language",
       "label": "Interface Language",
       "hint": "Select the language for the application interface"
+    },
+    "textCleaner": {
+      "title": "Text Cleaner",
+      "enabled": "Enable Text Cleaner",
+      "enabledHint": "Enable automatic ASS tag cleaning",
+      "preserveBasic": "Preserve basic formatting",
+      "preserveBasicHint": "Keeps bold (\\b), italic (\\i), underline (\\u)",
+      "ignoredStyles": "Ignored styles",
+      "ignoredStylesHint": "Lines with these styles will not be sent for translation",
+      "customTags": "Custom tags to remove",
+      "customTagsHint": "In addition to default visual tags, also remove these specific tags",
+      "visualTagsTitle": "Visual tags always removed:",
+      "visualTagsHint": "These tags control positioning, colors, rotation, scale, shadows, etc.",
+      "whatItDoes": "What does this do?",
+      "whatItDoesDescription": "Anime subtitles often contain complex visual effects (positioning, karaoke, colors, rotations) that pollute the text sent to the AI. The Text Cleaner extracts only the pure text for translation and re-applies the effects afterwards.",
+      "tokenSavings": "This saves tokens and prevents the AI from trying to translate effect codes."
     }
   },
   "logMessages": {

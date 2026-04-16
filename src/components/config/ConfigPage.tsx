@@ -8,7 +8,8 @@ import {
   ListChecks,
   FolderOpen,
   Translate,
-  ArrowSquareOut
+  ArrowSquareOut,
+  Sparkle
 } from '@phosphor-icons/react';
 import { ApiSettings } from './ApiSettings';
 import { FfmpegStatus } from './FfmpegStatus';
@@ -17,6 +18,7 @@ import { TemplateManager } from './TemplateManager';
 import { TranslationSettings } from './TranslationSettings';
 import { OutputSettings } from './OutputSettings';
 import { LanguageSettings } from './LanguageSettings';
+import { TextCleanerSettings } from './TextCleanerSettings';
 import { Button } from '@/components/ui/button';
 import { getAppDataDir, openFolder } from '@/utils/tauri';
 
@@ -171,6 +173,22 @@ export function ConfigPage() {
                 <h2 className="text-title">{t('settings.output.title')}</h2>
               </div>
               <OutputSettings />
+            </div>
+          </motion.div>
+
+          {/* Text Cleaner Settings */}
+          <motion.div variants={itemVariants}>
+            <div className="card-bento">
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                  <Sparkle className="w-4 h-4 text-purple-500" />
+                </div>
+                <div>
+                  <h2 className="text-title">{t('settings.textCleaner.title')}</h2>
+                  <p className="text-caption">Remove ruído visual de legendas ASS antes de enviar para tradução</p>
+                </div>
+              </div>
+              <TextCleanerSettings />
             </div>
           </motion.div>
 
