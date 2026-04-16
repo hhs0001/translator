@@ -80,6 +80,9 @@ export interface TranslationOptions {
   continueOnError: boolean;
   maxRetries: number;
   streaming: boolean;
+  reasoningEffort: AppSettings['reasoningEffort'];
+  anthropicThinkingEnabled: boolean;
+  anthropicThinkingBudgetTokens: number;
 }
 
 export async function translateSubtitleFull(
@@ -100,6 +103,9 @@ export async function translateSubtitleFull(
       apiFormat,
       headers: Object.entries(headers).map(([k, v]) => [k, v]),
       model,
+      reasoningEffort: options.reasoningEffort,
+      anthropicThinkingEnabled: options.anthropicThinkingEnabled,
+      anthropicThinkingBudgetTokens: options.anthropicThinkingBudgetTokens,
     },
     systemPrompt: prompt,
     file: subtitle,

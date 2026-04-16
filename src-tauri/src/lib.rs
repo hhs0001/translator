@@ -630,6 +630,12 @@ struct AppSettings {
     concurrency: usize,
     #[serde(default)]
     streaming: bool,
+    #[serde(default)]
+    reasoning_effort: translator::ReasoningEffort,
+    #[serde(default)]
+    anthropic_thinking_enabled: bool,
+    #[serde(default = "default_anthropic_thinking_budget_tokens")]
+    anthropic_thinking_budget_tokens: u32,
 
     // Saída
     #[serde(default = "default_output_mode")]
@@ -676,6 +682,9 @@ impl Default for AppSettings {
             max_retries: default_max_retries(),
             concurrency: default_concurrency(),
             streaming: false,
+            reasoning_effort: translator::ReasoningEffort::default(),
+            anthropic_thinking_enabled: false,
+            anthropic_thinking_budget_tokens: default_anthropic_thinking_budget_tokens(),
             output_mode: default_output_mode(),
             mux_language: default_mux_language(),
             mux_title: default_mux_title(),
@@ -713,6 +722,10 @@ fn default_max_retries() -> usize {
 
 fn default_concurrency() -> usize {
     1
+}
+
+fn default_anthropic_thinking_budget_tokens() -> u32 {
+    1024
 }
 
 fn default_output_mode() -> String {
