@@ -13,7 +13,11 @@
     "name": "Name",
     "file": "File",
     "files": "files",
-    "lines": "lines"
+    "lines": "lines",
+    "batches": "batches",
+    "active": "active",
+    "done": "Done",
+    "pending": "Pending"
   },
   "navbar": {
     "title": "SubTranslator",
@@ -84,7 +88,8 @@
       "single": "Single",
       "batch": "Batch"
     },
-    "removeFile": "Remove file"
+    "removeFile": "Remove file",
+    "batchTooltip": "Batch {{number}}: {{completed}}/{{total}}"
   },
   "settings": {
     "title": "Settings",

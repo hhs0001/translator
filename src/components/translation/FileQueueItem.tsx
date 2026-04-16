@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { QueueFile, FileStatus } from '../../types';
 import { useTranslationStore } from '../../stores/translationStore';
+import { SegmentedProgress } from './SegmentedProgress';
 
 interface Props {
   file: QueueFile;
@@ -189,23 +190,34 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
 
         {/* Progress bar */}
         {showProgress && (
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                {file.status === 'translating' && file.totalLines > 0
-                  ? `${file.translatedLines}/${file.totalLines} ${t('common.lines')}`
-                  : statusLabel}
-              </span>
-              <span className="font-medium text-foreground">{Math.round(file.progress)}%</span>
-            </div>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-              <motion.div
-                className="h-full rounded-full bg-primary"
-                initial={{ width: 0 }}
-                animate={{ width: `${file.progress}%` }}
-                transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+          <div className="pt-1">
+            {file.status === 'translating' && file.parallelProgress && file.parallelProgress.totalBatches > 1 ? (
+              <SegmentedProgress
+                progress={file.progress}
+                totalLines={file.totalLines}
+                translatedLines={file.translatedLines}
+                batchProgress={file.parallelProgress}
               />
-            </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">
+                    {file.status === 'translating' && file.totalLines > 0
+                      ? `${file.translatedLines}/${file.totalLines} ${t('common.lines')}`
+                      : statusLabel}
+                  </span>
+                  <span className="font-medium text-foreground">{Math.round(file.progress)}%</span>
+                </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    className="h-full rounded-full bg-primary"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${file.progress}%` }}
+                    transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 

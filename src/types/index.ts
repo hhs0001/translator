@@ -167,6 +167,13 @@ export interface DetectedLanguage {
 
 export type FileStatus = 'pending' | 'extracting' | 'translating' | 'detecting_language' | 'saving' | 'muxing' | 'paused' | 'cancelled' | 'completed' | 'error';
 
+export interface BatchProgress {
+  batchIndex: number;
+  totalInBatch: number;
+  completedInBatch: number;
+  status: 'pending' | 'active' | 'completed' | 'error';
+}
+
 export interface QueueFile {
   id: string;
   name: string;
@@ -194,6 +201,14 @@ export interface QueueFile {
   // Paths de saída
   outputSubtitlePath?: string;
   outputVideoPath?: string;
+  
+  // Progresso paralelo (para visualização de batches)
+  parallelProgress?: {
+    totalBatches: number;
+    activeBatches: number;
+    completedBatches: number;
+    batchProgresses: BatchProgress[];
+  };
 }
 
 export interface TranslationState {

@@ -70,6 +70,8 @@ export function FileQueue({ maxVisible, showCancelAll }: Props) {
     () => (maxVisible ? queue.slice(0, maxVisible) : queue),
     [queue, maxVisible]
   );
+  
+  console.log("[DEBUG] FileQueue - queue length:", queue.length, "visible:", visibleQueue.length);
   const hiddenCount = useMemo(
     () => (maxVisible ? Math.max(0, queue.length - maxVisible) : 0),
     [queue.length, maxVisible]

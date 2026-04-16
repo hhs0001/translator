@@ -668,26 +668,24 @@ impl LlmClient {
             .ok_or_else(|| "No response from model".to_string())
     }
 
-    /// Translates subtitles with streaming (OpenAI format only)
+    /// Translates a single batch with streaming (OpenAI format only)
     /// Emits events as each entry is translated
-    /// Uses batching to process in smaller groups
-    pub async fn translate_subtitles_streaming(
+    async fn translate_streaming_batch(
         &self,
         system_prompt: &str,
-        entries: &[(usize, String)],
-        batch_size: usize,
+        batch: &[(usize, String)],
+        batch_index: usize,
         max_retries: usize,
         cancel_flag: Option<Arc<AtomicBool>>,
+        original_map: &HashMap<usize, &str>,
         mut on_entry: impl FnMut(TranslatedEntryEvent),
     ) -> Result<Vec<(usize, String)>, String> {
-        // Create map of original indices for ASS tag validation (using references to avoid cloning)
-        let original_map: HashMap<usize, &str> =
-            entries.iter().map(|(i, s)| (*i, s.as_str())).collect();
         let mut all_results = Vec::new();
+        let mut retries = 0;
 
-        // Process in batches
-        for batch in entries.chunks(batch_size) {
+        loop {
             check_cancelled(&cancel_flag)?;
+
             let formatted: String = batch
                 .iter()
                 .map(|(idx, text)| {
@@ -736,155 +734,238 @@ CRITICAL FORMAT INSTRUCTIONS:
                     .map(str::to_string),
             };
 
-            // Retry loop for streaming batch
-            let mut attempt = 0;
-            let batch_results = loop {
-                check_cancelled(&cancel_flag)?;
-                attempt += 1;
-
-                let response = self
-                    .apply_headers(
-                        self.client
-                            .post(&self.config.endpoint)
-                            .header("Content-Type", "application/json"),
-                    )
-                    .json(&request)
-                    .send()
-                    .await;
-
-                let response = match response {
-                    Ok(r) => r,
-                    Err(e) => {
-                        if attempt > max_retries {
-                            return Err(format!("Translation request failed: {}", e));
-                        }
-                        check_cancelled(&cancel_flag)?;
-                        tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                        continue;
-                    }
-                };
-
-                if !response.status().is_success() {
-                    let status = response.status();
-                    let body = response.text().await.unwrap_or_default();
-                    if attempt > max_retries {
-                        return Err(format!("Translation API error {}: {}", status, body));
+            let response = match self
+                .apply_headers(
+                    self.client
+                        .post(&self.config.endpoint)
+                        .header("Content-Type", "application/json"),
+                )
+                .json(&request)
+                .send()
+                .await
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    retries += 1;
+                    if retries > max_retries {
+                        return Err(format!("Batch {}: Translation request failed after {} retries: {}", batch_index, max_retries, e));
                     }
                     check_cancelled(&cancel_flag)?;
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
                     continue;
                 }
+            };
 
-                let mut current_text = String::new();
-                let mut buffer = String::new();
-                let mut batch_results = Vec::new();
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                retries += 1;
+                if retries > max_retries {
+                    return Err(format!("Batch {}: Translation API error {} after {} retries: {}", batch_index, status, max_retries, body));
+                }
+                check_cancelled(&cancel_flag)?;
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+                continue;
+            }
 
-                let mut stream = response.bytes_stream();
+            let mut current_text = String::new();
+            let mut buffer = String::new();
+            let mut batch_results = Vec::new();
 
-                while let Some(chunk_result) = stream.next().await {
-                    if is_cancelled(&cancel_flag) {
-                        return Err(TRANSLATION_CANCELLED_ERROR.to_string());
+            let mut stream = response.bytes_stream();
+
+            while let Some(chunk_result) = stream.next().await {
+                if is_cancelled(&cancel_flag) {
+                    return Err(TRANSLATION_CANCELLED_ERROR.to_string());
+                }
+                let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
+                let chunk_str = String::from_utf8_lossy(&chunk);
+                buffer.push_str(&chunk_str);
+
+                // Process complete SSE lines
+                while let Some(newline_pos) = buffer.find('\n') {
+                    let line = buffer[..newline_pos].trim().to_string();
+                    buffer = buffer[newline_pos + 1..].to_string();
+
+                    if line.is_empty() || line == "data: [DONE]" {
+                        continue;
                     }
-                    let chunk = chunk_result.map_err(|e| format!("Stream error: {}", e))?;
-                    let chunk_str = String::from_utf8_lossy(&chunk);
-                    buffer.push_str(&chunk_str);
 
-                    // Process complete SSE lines
-                    while let Some(newline_pos) = buffer.find('\n') {
-                        let line = buffer[..newline_pos].trim().to_string();
-                        buffer = buffer[newline_pos + 1..].to_string();
+                    if let Some(json_str) = line.strip_prefix("data: ") {
+                        match serde_json::from_str::<StreamChunk>(json_str) {
+                            Ok(chunk) => {
+                                for choice in chunk.choices {
+                                    if let Some(content) = choice.delta.content {
+                                        // Process received content character by character
+                                        for ch in content.chars() {
+                                            if ch == '\n' {
+                                                // End of a line - try to parse
+                                                let line_content =
+                                                    current_text.trim().to_string();
+                                                if let Some((idx, text)) =
+                                                    parse_translation_line(
+                                                        &line_content,
+                                                        NEWLINE_PLACEHOLDER,
+                                                    )
+                                                {
+                                                    // Validate ASS tag compatibility
+                                                    let should_emit = original_map
+                                                        .get(&idx)
+                                                        .map(|orig| {
+                                                            Self::tags_compatible(orig, &text)
+                                                        })
+                                                        .unwrap_or(true);
 
-                        if line.is_empty() || line == "data: [DONE]" {
-                            continue;
-                        }
-
-                        if let Some(json_str) = line.strip_prefix("data: ") {
-                            match serde_json::from_str::<StreamChunk>(json_str) {
-                                Ok(chunk) => {
-                                    for choice in chunk.choices {
-                                        if let Some(content) = choice.delta.content {
-                                            // Process received content character by character
-                                            for ch in content.chars() {
-                                                if ch == '\n' {
-                                                    // End of a line - try to parse
-                                                    let line_content =
-                                                        current_text.trim().to_string();
-                                                    if let Some((idx, text)) =
-                                                        parse_translation_line(
-                                                            &line_content,
-                                                            NEWLINE_PLACEHOLDER,
-                                                        )
-                                                    {
-                                                        // Validate ASS tag compatibility
-                                                        let should_emit = original_map
-                                                            .get(&idx)
-                                                            .map(|orig| {
-                                                                Self::tags_compatible(orig, &text)
-                                                            })
-                                                            .unwrap_or(true);
-
-                                                        if should_emit {
-                                                            on_entry(TranslatedEntryEvent {
-                                                                index: idx,
-                                                                text: text.clone(),
-                                                            });
-                                                            batch_results.push((idx, text));
-                                                        }
+                                                    if should_emit {
+                                                        on_entry(TranslatedEntryEvent {
+                                                            index: idx,
+                                                            text: text.clone(),
+                                                        });
+                                                        batch_results.push((idx, text));
                                                     }
-                                                    current_text.clear();
-                                                } else {
-                                                    current_text.push(ch);
                                                 }
+                                                current_text.clear();
+                                            } else {
+                                                current_text.push(ch);
                                             }
                                         }
                                     }
                                 }
-                                Err(e) => {
-                                    // Log invalid JSON chunks in debug mode for troubleshooting
-                                    #[cfg(debug_assertions)]
-                                    eprintln!(
-                                        "Failed to parse SSE chunk: {} - JSON: {}",
-                                        e, json_str
-                                    );
-                                    let _ = e; // Suppress unused warning in release
-                                }
+                            }
+                            Err(e) => {
+                                #[cfg(debug_assertions)]
+                                eprintln!(
+                                    "Failed to parse SSE chunk: {} - JSON: {}",
+                                    e, json_str
+                                );
+                                let _ = e;
                             }
                         }
                     }
                 }
+            }
 
-                check_cancelled(&cancel_flag)?;
+            check_cancelled(&cancel_flag)?;
 
-                // Process last line of the batch if any
-                let line_content = current_text.trim().to_string();
-                if let Some((idx, text)) =
-                    parse_translation_line(&line_content, NEWLINE_PLACEHOLDER)
-                {
-                    let should_emit = original_map
-                        .get(&idx)
-                        .map(|orig| Self::tags_compatible(orig, &text))
-                        .unwrap_or(true);
+            // Process last line of the batch if any
+            let line_content = current_text.trim().to_string();
+            if let Some((idx, text)) =
+                parse_translation_line(&line_content, NEWLINE_PLACEHOLDER)
+            {
+                let should_emit = original_map
+                    .get(&idx)
+                    .map(|orig| Self::tags_compatible(orig, &text))
+                    .unwrap_or(true);
 
-                    if should_emit {
-                        on_entry(TranslatedEntryEvent {
-                            index: idx,
-                            text: text.clone(),
-                        });
-                        batch_results.push((idx, text));
-                    }
+                if should_emit {
+                    on_entry(TranslatedEntryEvent {
+                        index: idx,
+                        text: text.clone(),
+                    });
+                    batch_results.push((idx, text));
                 }
-
-                break batch_results;
-            };
+            }
 
             all_results.extend(batch_results);
+            break;
         }
+
+        Ok(all_results)
+    }
+
+    /// Translates subtitles with streaming (OpenAI format only)
+    /// Emits events as each entry is translated
+    /// Uses batching to process in smaller groups with parallel execution
+    #[allow(clippy::too_many_arguments)]
+    pub async fn translate_subtitles_streaming(
+        &self,
+        system_prompt: &str,
+        entries: &[(usize, String)],
+        batch_size: usize,
+        parallel_requests: usize,
+        max_retries: usize,
+        cancel_flag: Option<Arc<AtomicBool>>,
+        on_entry: impl FnMut(TranslatedEntryEvent) + Send + Clone,
+    ) -> Result<Vec<(usize, String)>, String> {
+        // Create map of original indices for ASS tag validation
+        let original_map: HashMap<usize, &str> =
+            entries.iter().map(|(i, s)| (*i, s.as_str())).collect();
+        let parallel_requests = parallel_requests.max(1);
+
+        // Divide entries em batches
+        let batches: Vec<Vec<(usize, String)>> = entries
+            .chunks(batch_size)
+            .map(|chunk| chunk.to_vec())
+            .collect();
+
+        let total_batches = batches.len();
+        let mut batch_results: Vec<Option<Vec<(usize, String)>>> = vec![None; total_batches];
+        let mut current_batch_group = 0;
+
+        // Processa batches em grupos de parallel_requests
+        check_cancelled(&cancel_flag)?;
+        while current_batch_group * parallel_requests < total_batches {
+            check_cancelled(&cancel_flag)?;
+            let start_idx = current_batch_group * parallel_requests;
+            let end_idx = (start_idx + parallel_requests).min(total_batches);
+
+            // Prepara futures para este grupo de batches
+            let mut futures = Vec::new();
+            for batch_idx in start_idx..end_idx {
+                if batch_results[batch_idx].is_none() {
+                    let batch = batches[batch_idx].clone();
+                    let cancel_flag = cancel_flag.clone();
+                    let original_map = &original_map;
+                    let mut on_entry_clone = on_entry.clone();
+                    
+                    futures.push(async move {
+                        let result = self.translate_streaming_batch(
+                            system_prompt,
+                            &batch,
+                            batch_idx,
+                            max_retries,
+                            cancel_flag,
+                            original_map,
+                            &mut on_entry_clone,
+                        ).await;
+                        (batch_idx, result)
+                    });
+                }
+            }
+
+            if futures.is_empty() {
+                current_batch_group += 1;
+                continue;
+            }
+
+            // Executa batches em paralelo
+            let results = join_all(futures).await;
+            check_cancelled(&cancel_flag)?;
+
+            // Processa resultados
+            for (batch_idx, result) in results {
+                match result {
+                    Ok(translations) => {
+                        batch_results[batch_idx] = Some(translations);
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            }
+
+            current_batch_group += 1;
+        }
+
+        // Coleta e ordena todos os resultados
+        let mut all_results: Vec<(usize, String)> =
+            batch_results.into_iter().flatten().flatten().collect();
+        all_results.sort_by_key(|(idx, _)| *idx);
 
         if all_results.is_empty() {
             return Err("Failed to parse streaming translation response".to_string());
         }
 
-        all_results.sort_by_key(|(idx, _)| *idx);
         Ok(all_results)
     }
 

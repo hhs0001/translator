@@ -293,6 +293,7 @@ async fn translate_subtitle_full(
                 &system_prompt,
                 &texts,
                 settings.batch_size,
+                settings.parallel_requests,
                 settings.max_retries,
                 Some(cancel_handle.flag()),
                 move |entry| {

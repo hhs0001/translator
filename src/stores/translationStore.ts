@@ -21,6 +21,33 @@ const PROCESSING_STATUSES: FileStatus[] = [
 const isProcessingStatus = (status: FileStatus) =>
   PROCESSING_STATUSES.includes(status);
 
+// Helper to initialize parallel progress for a file
+function initializeParallelProgress(
+  totalEntries: number, 
+  batchSize: number, 
+  parallelRequests: number
+) {
+  const totalBatches = Math.ceil(totalEntries / batchSize);
+  const batchProgresses = Array.from({ length: totalBatches }, (_, i) => ({
+    batchIndex: i,
+    totalInBatch: Math.min(batchSize, totalEntries - i * batchSize),
+    completedInBatch: 0,
+    status: 'pending' as const,
+  }));
+
+  // Marca os primeiros batches como ativos baseado no parallelRequests
+  for (let i = 0; i < Math.min(parallelRequests, totalBatches); i++) {
+    (batchProgresses[i] as { status: 'pending' | 'active' | 'completed' | 'error' }).status = 'active';
+  }
+
+  return {
+    totalBatches,
+    activeBatches: Math.min(parallelRequests, totalBatches),
+    completedBatches: 0,
+    batchProgresses,
+  };
+}
+
 // Module-level map to track translated indices per file (for streaming mode)
 // This is kept outside the hook to persist across re-renders but allow cleanup on file removal
 const translatedIndicesMap = new Map<string, Set<number>>();
@@ -81,8 +108,24 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
   isPaused: false,
 
   addFiles: (files) => {
+    console.log("[DEBUG] addFiles called with:", files);
+    if (!files || files.length === 0) {
+      console.warn("[DEBUG] No files to add");
+      return;
+    }
+    
+    // Helper para gerar UUID compatível
+    const generateId = () => {
+      try {
+        return crypto.randomUUID();
+      } catch (e) {
+        // Fallback para ambiente sem crypto.randomUUID
+        return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+      }
+    };
+    
     const newFiles: QueueFile[] = files.map((f) => ({
-      id: crypto.randomUUID(),
+      id: generateId(),
       name: f.name,
       path: f.path,
       type: f.type,
@@ -92,7 +135,15 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       translatedLines: 0,
       isLoadingTracks: f.type === "video",
     }));
-    set((state) => ({ queue: [...state.queue, ...newFiles] }));
+    
+    console.log("[DEBUG] Creating new files:", newFiles);
+    
+    set((state) => {
+      const newQueue = [...state.queue, ...newFiles];
+      console.log("[DEBUG] New queue length:", newQueue.length);
+      return { queue: newQueue };
+    });
+    
     useLogsStore
       .getState()
       .addLog(
@@ -407,6 +458,15 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
 
       if (isCancelled()) return;
       setFileStatus(file.id, "translating");
+      
+      // Inicializa progresso paralelo
+      const parallelProgress = initializeParallelProgress(
+        subtitle.entries.length,
+        settings.batchSize,
+        settings.parallelRequests
+      );
+      updateFile(file.id, { parallelProgress });
+      
       logs.addLog(
         "info",
         i18n.t("logMessages.translatingFile", {
@@ -541,6 +601,8 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
 
       if (isCancelled()) return;
       setFileStatus(file.id, "completed");
+      // Limpa parallelProgress ao completar
+      updateFile(file.id, { parallelProgress: undefined });
       logs.addLog(
         "success",
         i18n.t("logMessages.fileProcessed", { fileName: file.name }),
@@ -552,6 +614,8 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
       if (alreadyCancelled || errorMsg.includes(CANCELLATION_ERROR_MESSAGE)) {
         if (!alreadyCancelled) {
           setFileStatus(file.id, "cancelled");
+          // Limpa parallelProgress ao cancelar
+          updateFile(file.id, { parallelProgress: undefined });
           logs.addLog(
             "warning",
             i18n.t("logMessages.translationCancelledFor", {
@@ -563,6 +627,8 @@ export const useTranslationStore = create<TranslationState>((set, get) => ({
         return;
       }
       setFileStatus(file.id, "error", errorMsg);
+      // Limpa parallelProgress ao ter erro
+      updateFile(file.id, { parallelProgress: undefined });
       logs.addLog(
         "error",
         i18n.t("logMessages.errorProcessing", {
@@ -591,6 +657,66 @@ export function useTranslationEvents() {
     const pendingEntries = new Map<string, Map<number, string>>();
     let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
+    // Helper para calcular progresso paralelo atualizado
+    const updateParallelProgress = (
+      file: QueueFile, 
+      translatedIndices: Set<number>
+    ) => {
+      if (!file.parallelProgress || !file.originalSubtitle) return null;
+      
+      const { batchProgresses, totalBatches } = file.parallelProgress;
+      const settings = useSettingsStore.getState().settings;
+      const batchSize = settings.batchSize;
+      const parallelRequests = settings.parallelRequests;
+      
+      let completedBatches = 0;
+      let activeBatches = 0;
+      const updatedBatchProgresses = batchProgresses.map((batch, idx) => {
+        const batchStartIdx = idx * batchSize;
+        const batchEndIdx = Math.min(batchStartIdx + batchSize, file.totalLines);
+        
+        // Conta quantas entradas deste batch foram traduzidas
+        let completedInBatch = 0;
+        if (file.originalSubtitle) {
+          for (let i = batchStartIdx; i < batchEndIdx; i++) {
+            if (i < file.originalSubtitle.entries.length) {
+              const entryIndex = file.originalSubtitle.entries[i].index;
+              if (translatedIndices.has(entryIndex)) {
+                completedInBatch++;
+              }
+            }
+          }
+        }
+        
+        // Determina status do batch
+        let status: 'pending' | 'active' | 'completed' | 'error' = 'pending';
+        if (completedInBatch >= (batchEndIdx - batchStartIdx)) {
+          status = 'completed';
+          completedBatches++;
+        } else if (completedInBatch > 0) {
+          status = 'active';
+          activeBatches++;
+        } else if (idx < completedBatches + parallelRequests) {
+          // Batch está na "fila" para ser processado
+          status = 'active';
+          activeBatches++;
+        }
+        
+        return {
+          ...batch,
+          completedInBatch,
+          status,
+        };
+      });
+      
+      return {
+        totalBatches,
+        activeBatches,
+        completedBatches,
+        batchProgresses: updatedBatchProgresses,
+      };
+    };
+
     const flushProgress = () => {
       flushTimeout = null;
 
@@ -605,6 +731,18 @@ export function useTranslationEvents() {
           translatedLines: payload.translated,
           totalLines: payload.total,
         };
+        
+        // Atualiza parallelProgress se disponível
+        if (file.parallelProgress && translatedIndicesMap.has(fileId)) {
+          const indices = translatedIndicesMap.get(fileId)!;
+          const updatedProgress = updateParallelProgress(file, indices);
+          if (updatedProgress) {
+            updates[fileId] = {
+              ...updates[fileId],
+              parallelProgress: updatedProgress,
+            };
+          }
+        }
       }
       pendingProgress.clear();
 
@@ -640,11 +778,21 @@ export function useTranslationEvents() {
           const progressPercent =
             total > 0 ? (translatedCount / total) * 100 : 0;
 
+          // Calcula parallelProgress atualizado
+          let parallelProgressUpdate = file.parallelProgress;
+          if (file.parallelProgress) {
+            const updatedProgress = updateParallelProgress(file, indices);
+            if (updatedProgress) {
+              parallelProgressUpdate = updatedProgress;
+            }
+          }
+
           updates[fileId] = {
             ...updates[fileId],
             translatedEntries: currentTranslated,
             translatedLines: translatedCount,
             progress: progressPercent,
+            parallelProgress: parallelProgressUpdate,
           };
         }
       }
