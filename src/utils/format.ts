@@ -97,6 +97,32 @@ export function stripHtmlTags(html: string): string {
   return html.replace(/<[^>]*>/g, '');
 }
 
+/**
+ * Strip ASS subtitle override tags from text.
+ * ASS tags look like \tag, \tag(value), \tag(value1,value2), etc.
+ * Examples: \pos(637.87,711.77), \blur1, \frz10.431, \fscx61, etc.
+ * Also handles line breaks (\N) and soft breaks (\n).
+ */
+export function stripAssTags(text: string): string {
+  if (!text) return '';
+  
+  // Remove ASS override tags: \tag or \tag(...) or \tag(value,value)
+  // This regex matches: backslash followed by letters, then optionally parentheses with content
+  let cleaned = text.replace(/\\[a-zA-Z]+\([^)]*\)/g, '');
+  
+  // Remove simple tags without parentheses like \blur1, \frz10.431, \fscx61
+  cleaned = cleaned.replace(/\\[a-zA-Z]+\d+(?:\.\d+)?/g, '');
+  
+  // Remove remaining simple tags (just \tag)
+  cleaned = cleaned.replace(/\\[a-zA-Z]+/g, '');
+  
+  // Replace ASS line breaks (\N is hard break, \n is soft break)
+  cleaned = cleaned.replace(/\\N/g, '\n').replace(/\\n/g, ' ');
+  
+  // Clean up multiple spaces and trim
+  return cleaned.replace(/\s+/g, ' ').trim();
+}
+
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return '0 Bytes';
 
