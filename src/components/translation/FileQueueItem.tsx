@@ -1,14 +1,14 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { 
-  FilmStrip, 
-  FileText, 
+import {
+  FilmStrip,
+  FileText,
   X,
   Prohibit,
   CheckCircle,
   WarningCircle,
-  Spinner
+  Spinner,
 } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { QueueFile, FileStatus } from '../../types';
 import { useTranslationStore } from '../../stores/translationStore';
 import { SegmentedProgress } from './SegmentedProgress';
+import { LoadingBadge, LoadingText } from '@/components/ui/loading-text';
 
 interface Props {
   file: QueueFile;
@@ -146,9 +147,13 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
           <span className="text-sm font-medium truncate" title={file.name}>
             {file.name}
           </span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusConfig.bgClass} ${statusConfig.className}`}>
-            {statusLabel}
-          </span>
+          {isProcessing ? (
+            <LoadingBadge text={statusLabel} />
+          ) : (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusConfig.bgClass} ${statusConfig.className}`}>
+              {statusLabel}
+            </span>
+          )}
         </div>
 
         {/* Track selection for videos */}
@@ -201,11 +206,17 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
             ) : (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">
-                    {file.status === 'translating' && file.totalLines > 0
-                      ? `${file.translatedLines}/${file.totalLines} ${t('common.lines')}`
-                      : statusLabel}
-                  </span>
+                  {file.status === 'translating' && file.totalLines > 0 ? (
+                    <span className="text-muted-foreground">
+                      {file.translatedLines}/{file.totalLines} {t('common.lines')}
+                    </span>
+                  ) : (
+                    <LoadingText 
+                      text={statusLabel} 
+                      variant="shimmer" 
+                      className="text-xs text-muted-foreground" 
+                    />
+                  )}
                   <span className="font-medium text-foreground">{Math.round(file.progress)}%</span>
                 </div>
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
