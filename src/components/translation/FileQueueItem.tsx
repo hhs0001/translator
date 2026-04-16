@@ -1,10 +1,18 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Badge } from '@/components/ui/badge';
+import { motion } from 'framer-motion';
+import { 
+  FilmStrip, 
+  FileText, 
+  X,
+  Prohibit,
+  CheckCircle,
+  WarningCircle,
+  Spinner
+} from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Spinner } from '@/components/ui/spinner';
 import { QueueFile, FileStatus } from '../../types';
 import { useTranslationStore } from '../../stores/translationStore';
 
@@ -13,17 +21,72 @@ interface Props {
   index: number;
 }
 
-const STATUS_CLASSES: Record<FileStatus, string> = {
-  pending: 'bg-muted text-muted-foreground',
-  extracting: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  translating: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  detecting_language: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  saving: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  muxing: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-  paused: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
-  cancelled: 'bg-muted text-muted-foreground',
-  completed: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-  error: 'bg-destructive/15 text-destructive',
+const STATUS_CONFIG: Record<FileStatus, { 
+  icon: React.ComponentType<{ className?: string }>;
+  className: string;
+  bgClass: string;
+  label: string;
+}> = {
+  pending: { 
+    icon: FileText, 
+    className: 'text-muted-foreground',
+    bgClass: 'bg-muted',
+    label: 'translation.status.pending'
+  },
+  extracting: { 
+    icon: Spinner, 
+    className: 'text-info animate-spin',
+    bgClass: 'bg-info/10',
+    label: 'translation.status.extracting'
+  },
+  translating: { 
+    icon: Spinner, 
+    className: 'text-info animate-spin',
+    bgClass: 'bg-info/10',
+    label: 'translation.status.translating'
+  },
+  detecting_language: { 
+    icon: Spinner, 
+    className: 'text-info animate-spin',
+    bgClass: 'bg-info/10',
+    label: 'translation.status.detecting_language'
+  },
+  saving: { 
+    icon: Spinner, 
+    className: 'text-info animate-spin',
+    bgClass: 'bg-info/10',
+    label: 'translation.status.saving'
+  },
+  muxing: { 
+    icon: Spinner, 
+    className: 'text-info animate-spin',
+    bgClass: 'bg-info/10',
+    label: 'translation.status.muxing'
+  },
+  paused: { 
+    icon: Prohibit, 
+    className: 'text-warning',
+    bgClass: 'bg-warning/10',
+    label: 'translation.status.paused'
+  },
+  cancelled: { 
+    icon: X, 
+    className: 'text-muted-foreground',
+    bgClass: 'bg-muted',
+    label: 'translation.status.cancelled'
+  },
+  completed: { 
+    icon: CheckCircle, 
+    className: 'text-success',
+    bgClass: 'bg-success/10',
+    label: 'translation.status.completed'
+  },
+  error: { 
+    icon: WarningCircle, 
+    className: 'text-error',
+    bgClass: 'bg-error/10',
+    label: 'translation.status.error'
+  },
 };
 
 function getTrackLabel(track: { index: number; codec: string; language?: string; title?: string }, trackText: string) {
@@ -39,14 +102,17 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
   const removeFile = useTranslationStore((s) => s.removeFile);
   const setSelectedTrack = useTranslationStore((s) => s.setSelectedTrack);
   const cancelFileTranslation = useTranslationStore((s) => s.cancelFileTranslation);
-  const statusLabel = t(`translation.status.${file.status}`);
-  const statusClass = STATUS_CLASSES[file.status];
+  
+  const statusConfig = STATUS_CONFIG[file.status];
+  const StatusIcon = statusConfig.icon;
+  const statusLabel = t(statusConfig.label);
 
   const isProcessing = ['extracting', 'translating', 'detecting_language', 'saving', 'muxing'].includes(file.status);
   const canCancel = file.status !== 'completed' && file.status !== 'error' && file.status !== 'cancelled';
   const isVideo = file.type === 'video';
   const hasTracks = file.subtitleTracks && file.subtitleTracks.length > 0;
   const noTracks = file.subtitleTracks && file.subtitleTracks.length === 0 && !file.isLoadingTracks;
+  const showProgress = isProcessing && file.progress > 0;
 
   const handleTrackChange = (value: string) => {
     if (value !== '') {
@@ -55,51 +121,64 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-      <div className="w-6 text-center text-muted-foreground text-sm">
-        {index + 1}
+    <div className="group relative flex items-start gap-3 p-4 rounded-xl bg-muted/40 hover:bg-muted/60 transition-colors duration-200">
+      {/* Index / Status Icon */}
+      <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${statusConfig.bgClass}`}>
+        {isProcessing ? (
+          <StatusIcon className={`w-4 h-4 ${statusConfig.className}`} />
+        ) : (
+          <span className="text-sm font-medium text-muted-foreground">
+            {index + 1}
+          </span>
+        )}
       </div>
 
-      <div className="flex-1 min-w-0">
+      {/* Content */}
+      <div className="flex-1 min-w-0 space-y-2">
+        {/* File name and type */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium truncate">{file.name}</span>
-          <Badge variant="outline" className={`border-transparent ${statusClass}`}>
-            {statusLabel}
-          </Badge>
-          {isVideo && (
-            <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">
-              Video
-            </Badge>
+          {isVideo ? (
+            <FilmStrip className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          ) : (
+            <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
           )}
+          <span className="text-sm font-medium truncate" title={file.name}>
+            {file.name}
+          </span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${statusConfig.bgClass} ${statusConfig.className}`}>
+            {statusLabel}
+          </span>
         </div>
 
+        {/* Track selection for videos */}
         {isVideo && file.isLoadingTracks && (
-          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-            <Spinner className="size-3" />
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Spinner className="w-3 h-3 animate-spin" />
             <span>{t('translation.video.detectingTracks')}</span>
           </div>
         )}
 
         {isVideo && noTracks && (
-          <p className="text-xs text-amber-600 mt-2">
-            {t('translation.video.noTracksFound')}
-          </p>
+          <div className="flex items-center gap-2 text-xs text-warning">
+            <WarningCircle className="w-3.5 h-3.5" />
+            <span>{t('translation.video.noTracksFound')}</span>
+          </div>
         )}
 
         {isVideo && hasTracks && (
-          <div className="mt-2">
+          <div>
             <Select
               value={String(file.selectedTrackIndex ?? 0)}
               onValueChange={handleTrackChange}
               disabled={isProcessing}
             >
               <Label className="sr-only">{t('translation.video.subtitleTrack')}</Label>
-              <SelectTrigger className="w-full max-w-xs">
+              <SelectTrigger className="w-full max-w-sm h-8 text-xs bg-background/50">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {file.subtitleTracks!.map((track) => (
-                  <SelectItem key={track.index} value={String(track.index)}>
+                  <SelectItem key={track.index} value={String(track.index)} className="text-xs">
                     {getTrackLabel(track, t('translation.video.track', { index: '' }).replace('{{index}}', '').trim())}
                   </SelectItem>
                 ))}
@@ -108,53 +187,62 @@ export const FileQueueItem = memo(function FileQueueItem({ file, index }: Props)
           </div>
         )}
 
-        {isProcessing && (
-          <div className="mt-2">
-            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-              <span>
+        {/* Progress bar */}
+        {showProgress && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
                 {file.status === 'translating' && file.totalLines > 0
                   ? `${file.translatedLines}/${file.totalLines} ${t('common.lines')}`
                   : statusLabel}
               </span>
-              <span className="font-medium">{Math.round(file.progress)}%</span>
+              <span className="font-medium text-foreground">{Math.round(file.progress)}%</span>
             </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary transition-all duration-300 ease-out"
-                style={{ width: `${file.progress}%` }}
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+              <motion.div
+                className="h-full rounded-full bg-primary"
+                initial={{ width: 0 }}
+                animate={{ width: `${file.progress}%` }}
+                transition={{ type: 'spring', stiffness: 100, damping: 20 }}
               />
             </div>
           </div>
         )}
 
+        {/* Error message */}
         {file.error && (
-          <p className="text-xs text-destructive mt-1 truncate">
-            {file.error}
-          </p>
+          <div className="flex items-start gap-2 text-xs text-error bg-error/5 rounded-lg p-2">
+            <WarningCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span className="line-clamp-2">{file.error}</span>
+          </div>
         )}
       </div>
-      <div className="flex items-center gap-2">
+
+      {/* Actions */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         {canCancel && (
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => cancelFileTranslation(file.id)}
+              className="h-7 px-2 text-xs text-warning hover:text-warning hover:bg-warning/10"
+            >
+              {t('common.cancel')}
+            </Button>
+          </motion.div>
+        )}
+        <motion.div whileTap={{ scale: 0.95 }}>
           <Button
             size="sm"
-            variant="outline"
-            className="border-destructive/40 text-destructive hover:bg-destructive/10"
-            onClick={() => cancelFileTranslation(file.id)}
-            aria-label={t('translation.queue.cancelFile')}
+            variant="ghost"
+            onClick={() => removeFile(file.id)}
+            disabled={isProcessing}
+            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           >
-            {t('common.cancel')}
+            <X className="w-4 h-4" />
           </Button>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-destructive hover:text-destructive"
-          onClick={() => removeFile(file.id)}
-          disabled={isProcessing}
-          aria-label={t('translation.removeFile')}
-        >
-          {t('translation.removeFile')}
-        </Button>
+        </motion.div>
       </div>
     </div>
   );

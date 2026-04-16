@@ -39,6 +39,8 @@
     "showLess": "Show less"
   },
   "translation": {
+    "title": "Translation",
+    "subtitle": "Translate subtitle files using AI",
     "dropzone": {
       "title": "Drop files here",
       "subtitle": "Supports: SRT, ASS, SSA, MKV, MP4, AVI",
@@ -75,7 +77,8 @@
     "editor": {
       "original": "Original",
       "translated": "Translation",
-      "lines": "lines"
+      "lines": "lines",
+      "empty": "Select a file to view and edit subtitles"
     },
     "mode": {
       "single": "Single",
@@ -85,6 +88,7 @@
   },
   "settings": {
     "title": "Settings",
+    "subtitle": "Configure API, preferences and output options",
     "api": {
       "title": "API Connection",
       "baseUrl": "Base URL",

@@ -1,5 +1,14 @@
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Trash, 
+  Faders,
+  CheckCircle,
+  WarningCircle,
+  Info,
+  Prohibit,
+  FileText
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,11 +29,31 @@ import { LogEntry, LogLevel } from "../../types";
 import { memo, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/shallow";
 
-const LEVEL_BADGE_CLASSES: Record<LogLevel, string> = {
-  info: "bg-muted text-muted-foreground",
-  success: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  warning: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  error: "bg-destructive/15 text-destructive",
+const LEVEL_CONFIG: Record<LogLevel, { 
+  icon: React.ComponentType<{ className?: string }>;
+  className: string;
+  bgClass: string;
+}> = {
+  info: { 
+    icon: Info, 
+    className: 'text-info',
+    bgClass: 'bg-info/10',
+  },
+  success: { 
+    icon: CheckCircle, 
+    className: 'text-success',
+    bgClass: 'bg-success/10',
+  },
+  warning: { 
+    icon: WarningCircle, 
+    className: 'text-warning',
+    bgClass: 'bg-warning/10',
+  },
+  error: { 
+    icon: Prohibit, 
+    className: 'text-error',
+    bgClass: 'bg-error/10',
+  },
 };
 
 const EMPTY_LOGS: LogEntry[] = [];
@@ -32,33 +61,37 @@ const MAX_VISIBLE_LOGS = 200;
 
 const LogRow = memo(function LogRow({
   log,
-  fileLabel,
 }: {
   log: LogEntry;
-  fileLabel: string;
 }) {
+  const config = LEVEL_CONFIG[log.level];
+  const Icon = config.icon;
+  
   return (
-    <div className="p-3 hover:bg-muted/50">
-      <div className="flex items-start gap-2">
-        <Badge
-          variant="outline"
-          className={`border-transparent ${LEVEL_BADGE_CLASSES[log.level]}`}
-        >
-          {log.level}
-        </Badge>
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <p className="text-sm break-all">{log.message}</p>
+    <motion.div 
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="p-3 rounded-lg hover:bg-muted/50 transition-colors"
+    >
+      <div className="flex items-start gap-3">
+        <div className={`flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center ${config.bgClass}`}>
+          <Icon className={`w-3.5 h-3.5 ${config.className}`} />
+        </div>
+        <div className="flex-1 min-w-0 space-y-1">
+          <p className="text-sm text-foreground">{log.message}</p>
           {log.file && (
-            <p className="text-xs text-muted-foreground mt-1">
-              {fileLabel}: {log.file}
-            </p>
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <FileText className="w-3 h-3" />
+              <span className="truncate">{log.file}</span>
+            </div>
           )}
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-[10px] text-muted-foreground/70 font-mono">
             {log.timestampLabel}
           </p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 });
 
@@ -93,57 +126,106 @@ export function LogsDrawer() {
 
   const hiddenCount = Math.max(0, filteredLogs.length - visibleLogs.length);
   const canToggle = filteredLogs.length > MAX_VISIBLE_LOGS;
+  
+  // Count by level
+  const counts = useMemo(() => ({
+    all: logs.length,
+    info: logs.filter(l => l.level === 'info').length,
+    success: logs.filter(l => l.level === 'success').length,
+    warning: logs.filter(l => l.level === 'warning').length,
+    error: logs.filter(l => l.level === 'error').length,
+  }), [logs]);
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && closeDrawer()}>
-      <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-hidden flex flex-col">
-        <DialogHeader className="flex flex-row items-center justify-between flex-shrink-0">
-          <DialogTitle>{t("logs.title")}</DialogTitle>
-          <div className="flex gap-2">
+      <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0">
+        {/* Header */}
+        <DialogHeader className="flex flex-row items-center justify-between p-5 pb-3 border-b border-border/50 flex-shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Faders className="w-4 h-4 text-primary" />
+            </div>
+            <DialogTitle className="text-title">{t("logs.title")}</DialogTitle>
+          </div>
+          <div className="flex items-center gap-2">
             <Select
               value={filter}
               onValueChange={(value) => setFilter(value as LogLevel | "all")}
             >
-              <SelectTrigger className="w-28">
+              <SelectTrigger className="w-32 h-8 text-xs">
                 <SelectValue placeholder={t("logs.filter.all")} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">{t("logs.filter.all")}</SelectItem>
-                <SelectItem value="info">{t("logs.filter.info")}</SelectItem>
-                <SelectItem value="success">
-                  {t("logs.filter.success")}
+                <SelectItem value="all" className="text-xs">
+                  {t("logs.filter.all")} ({counts.all})
                 </SelectItem>
-                <SelectItem value="warning">
-                  {t("logs.filter.warning")}
+                <SelectItem value="info" className="text-xs">
+                  {t("logs.filter.info")} ({counts.info})
                 </SelectItem>
-                <SelectItem value="error">{t("logs.filter.error")}</SelectItem>
+                <SelectItem value="success" className="text-xs">
+                  {t("logs.filter.success")} ({counts.success})
+                </SelectItem>
+                <SelectItem value="warning" className="text-xs">
+                  {t("logs.filter.warning")} ({counts.warning})
+                </SelectItem>
+                <SelectItem value="error" className="text-xs">
+                  {t("logs.filter.error")} ({counts.error})
+                </SelectItem>
               </SelectContent>
             </Select>
-            <Button size="sm" variant="ghost" onClick={clearLogs}>
-              {t("common.clear")}
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={clearLogs}
+              className="h-8 px-2 text-muted-foreground hover:text-destructive"
+            >
+              <Trash className="w-4 h-4" />
             </Button>
           </div>
         </DialogHeader>
 
-        <ScrollArea className="-mx-6 flex-1 border-t border-border overflow-y-auto">
-          <div className="divide-y divide-border">
-            {!isOpen ? null : visibleLogs.length === 0 ? (
-              <p className="p-4 text-center text-muted-foreground">
-                {t("logs.empty")}
-              </p>
-            ) : (
-              visibleLogs.map((log) => (
-                <LogRow key={log.id} log={log} fileLabel={t("common.file")} />
-              ))
-            )}
+        {/* Logs Content */}
+        <ScrollArea className="flex-1 px-2">
+          <div className="py-2 space-y-1">
+            <AnimatePresence mode="popLayout">
+              {!isOpen ? null : visibleLogs.length === 0 ? (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-col items-center justify-center py-12 text-center"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mb-3">
+                    <Info className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {t("logs.empty")}
+                  </p>
+                </motion.div>
+              ) : (
+                visibleLogs.map((log, index) => (
+                  <motion.div
+                    key={log.id}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 8 }}
+                    transition={{ delay: index * 0.02 }}
+                  >
+                    <LogRow log={log} />
+                  </motion.div>
+                ))
+              )}
+            </AnimatePresence>
           </div>
         </ScrollArea>
+        
+        {/* Footer */}
         {canToggle && (
-          <div className="flex justify-center border-t border-border px-6 py-2">
+          <div className="flex justify-center border-t border-border/50 px-5 py-3">
             <Button
               size="sm"
               variant="ghost"
               onClick={() => setShowAll((prev) => !prev)}
+              className="text-xs"
             >
               {showAll
                 ? t("logs.showLess")

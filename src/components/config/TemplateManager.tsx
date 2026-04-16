@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { motion, AnimatePresence } from 'framer-motion';
+import { PencilSimple, Trash } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -74,8 +75,9 @@ export function TemplateManager() {
   };
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center justify-between mb-4">
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold">{t('settings.templates.title')}</h3>
         <Button variant="default" size="sm" onClick={openNewModal}>
           {t('settings.templates.newTemplate')}
@@ -83,36 +85,56 @@ export function TemplateManager() {
       </div>
 
       {templates.length === 0 ? (
-        <p className="text-muted-foreground text-center py-4">
-          {t('settings.templates.noTemplates')}
-        </p>
+        <div className="text-center py-8 px-4 rounded-xl bg-muted/30 border border-dashed border-border">
+          <p className="text-muted-foreground text-sm">
+            {t('settings.templates.noTemplates')}
+          </p>
+        </div>
       ) : (
         <div className="space-y-2">
-          {templates.map((template) => (
-            <div
-              key={template.id}
-              className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-            >
-              <div>
-                <p className="font-medium">{template.name}</p>
-                <p className="text-sm text-muted-foreground truncate max-w-md">
-                  {template.content}
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="ghost" onClick={() => openEditModal(template)}>
-                  {t('common.edit')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => openDeleteConfirm(template.id)}
-                >
-                  {t('common.delete')}
-                </Button>
-              </div>
-            </div>
-          ))}
+          <AnimatePresence mode="popLayout">
+            {templates.map((template) => (
+              <motion.div
+                key={template.id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                className="group flex items-start gap-3 p-4 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
+              >
+                {/* Content - takes available space */}
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="font-medium text-sm text-foreground">
+                    {template.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                    {template.content}
+                  </p>
+                </div>
+
+                {/* Actions - always visible, never shrink */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    onClick={() => openEditModal(template)}
+                    className="h-8 w-8 p-0"
+                  >
+                    <PencilSimple className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => openDeleteConfirm(template.id)}
+                    className="h-8 w-8 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash className="w-4 h-4" />
+                  </Button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
 
@@ -124,8 +146,8 @@ export function TemplateManager() {
               {editingTemplate ? t('settings.templates.editTemplate') : t('settings.templates.newTemplateTitle')}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex flex-col gap-1">
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
               <Label>{t('common.name')}</Label>
               <Input
                 placeholder={t('settings.templates.nameExample')}
@@ -133,13 +155,13 @@ export function TemplateManager() {
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
               />
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="space-y-2">
               <Label>{t('settings.templates.promptContent')}</Label>
               <Textarea
                 placeholder={t('settings.templates.promptPlaceholder')}
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                className="min-h-[200px]"
+                className="min-h-[200px] resize-none"
               />
             </div>
           </div>
@@ -160,7 +182,9 @@ export function TemplateManager() {
           <DialogHeader>
             <DialogTitle>{t('settings.templates.confirmDelete')}</DialogTitle>
           </DialogHeader>
-          <p>{t('settings.templates.confirmDeleteMessage')}</p>
+          <p className="text-muted-foreground">
+            {t('settings.templates.confirmDeleteMessage')}
+          </p>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
               {t('common.cancel')}
@@ -171,6 +195,6 @@ export function TemplateManager() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }

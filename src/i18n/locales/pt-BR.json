@@ -39,6 +39,8 @@
     "showLess": "Mostrar menos"
   },
   "translation": {
+    "title": "Traducao",
+    "subtitle": "Traduza arquivos de legenda usando IA",
     "dropzone": {
       "title": "Arraste arquivos aqui",
       "subtitle": "Suporta: SRT, ASS, SSA, MKV, MP4, AVI",
@@ -75,7 +77,8 @@
     "editor": {
       "original": "Original",
       "translated": "Traducao",
-      "lines": "linhas"
+      "lines": "linhas",
+      "empty": "Selecione um arquivo para visualizar e editar legendas"
     },
     "mode": {
       "single": "Single",
@@ -85,6 +88,7 @@
   },
   "settings": {
     "title": "Configuracoes",
+    "subtitle": "Configure API, preferencias e opcoes de saida",
     "api": {
       "title": "Conexao com API",
       "baseUrl": "Base URL",

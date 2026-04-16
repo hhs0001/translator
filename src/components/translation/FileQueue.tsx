@@ -1,7 +1,13 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FolderOpen, 
+  X,
+  FilmStrip,
+  ListDashes
+} from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { FileQueueItem } from './FileQueueItem';
@@ -13,9 +19,45 @@ interface Props {
   showCancelAll?: boolean;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -8 },
+  visible: {
+    opacity: 1,
+    x: 0,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 100,
+      damping: 20,
+    },
+  },
+  exit: {
+    opacity: 0,
+    x: 8,
+    transition: {
+      duration: 0.2,
+    },
+  },
+};
+
 export function FileQueue({ maxVisible, showCancelAll }: Props) {
   const { t } = useTranslation();
-  const { queue, clearQueue, setAllVideoTracks, cancelAllTranslations } = useTranslationStore(
+  const { 
+    queue, 
+    clearQueue, 
+    setAllVideoTracks, 
+    cancelAllTranslations 
+  } = useTranslationStore(
     useShallow((s) => ({
       queue: s.queue,
       clearQueue: s.clearQueue,
@@ -56,6 +98,10 @@ export function FileQueue({ maxVisible, showCancelAll }: Props) {
     [queue]
   );
 
+  // Count file types
+  const videoCount = queue.filter(f => f.type === 'video').length;
+  const subtitleCount = queue.filter(f => f.type === 'subtitle').length;
+
   const handleQuickSelect = (value: string) => {
     if (value !== '') {
       setAllVideoTracks(Number(value));
@@ -66,63 +112,114 @@ export function FileQueue({ maxVisible, showCancelAll }: Props) {
     return null;
   }
 
-  const fileLabel = queue.length === 1 ? t('translation.queue.file') : t('translation.queue.files');
-
   return (
-    <Card className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold">
-          {t('translation.queue.title')} ({queue.length} {fileLabel})
-        </h3>
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+      className="card-bento"
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between mb-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <ListDashes className="w-4 h-4 text-primary" />
+            </div>
+            <h3 className="text-title">{t('translation.queue.title')}</h3>
+          </div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground ml-10">
+            <span>{queue.length} {queue.length === 1 ? t('translation.queue.file') : t('translation.queue.files')}</span>
+            {videoCount > 0 && (
+              <span className="flex items-center gap-1">
+                <FilmStrip className="w-3 h-3" />
+                {videoCount} video{videoCount > 1 ? 's' : ''}
+              </span>
+            )}
+            {subtitleCount > 0 && (
+              <span className="flex items-center gap-1">
+                <ListDashes className="w-3 h-3" />
+                {subtitleCount} subtitle{subtitleCount > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
         <div className="flex items-center gap-2">
           {showCancelAll && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-amber-500/30 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
-              onClick={cancelAllTranslations}
-              disabled={!canCancelAll}
-            >
-              {t('translation.queue.cancelAll')}
-            </Button>
+            <motion.div whileTap={{ scale: 0.98 }}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={cancelAllTranslations}
+                disabled={!canCancelAll}
+                className="text-xs h-8 border-warning/30 text-warning hover:bg-warning/10"
+              >
+                {t('translation.queue.cancelAll')}
+              </Button>
+            </motion.div>
           )}
+          
           {hasMultipleVideos && maxTracks > 0 && (
             <Select onValueChange={handleQuickSelect}>
               <Label className="sr-only">{t('translation.queue.applyTrackAll')}</Label>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-44 h-8 text-xs">
                 <SelectValue placeholder={t('translation.queue.applyTrackAll')} />
               </SelectTrigger>
               <SelectContent>
                 {trackOptions.map((trackIndex) => (
-                  <SelectItem key={trackIndex} value={String(trackIndex)}>
+                  <SelectItem key={trackIndex} value={String(trackIndex)} className="text-xs">
                     {t('translation.queue.trackForAll', { index: trackIndex + 1 })}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           )}
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-destructive/30 text-destructive hover:bg-destructive/10"
-            onClick={clearQueue}
-          >
-            {t('common.clear')}
-          </Button>
+          
+          <motion.div whileTap={{ scale: 0.98 }}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={clearQueue}
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </motion.div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        {visibleQueue.map((file, index) => (
-          <FileQueueItem key={file.id} file={file} index={index} />
-        ))}
+      {/* File list */}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="space-y-2"
+      >
+        <AnimatePresence mode="popLayout">
+          {visibleQueue.map((file, index) => (
+            <motion.div
+              key={file.id}
+              variants={itemVariants}
+              layout
+              exit="exit"
+            >
+              <FileQueueItem file={file} index={index} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
 
         {hiddenCount > 0 && (
-          <p className="text-center text-sm text-muted-foreground py-2">
-            {t('translation.queue.moreFiles', { count: hiddenCount })}
-          </p>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-muted/50 text-sm text-muted-foreground"
+          >
+            <FolderOpen className="w-4 h-4" />
+            <span>{t('translation.queue.moreFiles', { count: hiddenCount })}</span>
+          </motion.div>
         )}
-      </div>
-    </Card>
+      </motion.div>
+    </motion.div>
   );
 }
