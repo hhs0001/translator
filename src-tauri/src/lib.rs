@@ -15,12 +15,11 @@ use ffmpeg::SubtitleTrack;
 use serde::{Deserialize, Serialize};
 use subtitle::{SubtitleFile, SubtitleFormat};
 use tauri::{Emitter, Manager};
-
+use text_cleaner::{clean_subtitle_entries, reapply_all_tags, TextCleanerConfig};
 use translator::{
     ApiFormat, BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
     TranslationProgress, TranslationSettings, TRANSLATION_CANCELLED_ERROR,
 };
-use text_cleaner::{TextCleanerConfig, clean_subtitle_entries, reapply_all_tags};
 
 // ============================================================================
 // Comandos de Legendas
@@ -265,6 +264,7 @@ impl Drop for CancelHandle {
 
 /// Traduz arquivo completo com batching e auto-continue
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn translate_subtitle_full(
     app: tauri::AppHandle,
     cancel_state: tauri::State<'_, TranslationCancelState>,
@@ -289,10 +289,18 @@ async fn translate_subtitle_full(
     // Prepara dados para tradução (com ou sem limpeza)
     let (texts_to_translate, cleaned_data, total) = if use_cleaner {
         // Extrai textos com metadados de estilo para limpeza
-        let entries_with_style: Vec<(usize, String, Option<String>)> = file.entries.iter()
-            .map(|e| (e.index, e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+        let entries_with_style: Vec<(usize, String, Option<String>)> = file
+            .entries
+            .iter()
+            .map(|e| {
+                (
+                    e.index,
+                    e.text.clone(),
+                    e.metadata.as_ref().and_then(|m| m.style.clone()),
+                )
+            })
             .collect();
-        
+
         let cleaned = clean_subtitle_entries(&entries_with_style, &cleaner_config);
         let total = cleaned.mappings.len();
         let texts: Vec<(usize, String)> = cleaned.texts_to_translate.clone();
@@ -338,7 +346,8 @@ async fn translate_subtitle_full(
 
         // Reaplica tags se usou cleaner, senão aplica normal
         let final_translations = if let Some(ref cleaned) = cleaned_data {
-            let translations_map: std::collections::HashMap<usize, String> = translations.into_iter().collect();
+            let translations_map: std::collections::HashMap<usize, String> =
+                translations.into_iter().collect();
             reapply_all_tags(cleaned, &translations_map, &cleaner_config)
         } else {
             translations
@@ -440,7 +449,8 @@ async fn translate_subtitle_full(
 
     // Reaplica tags se usou cleaner, senão aplica normal
     let final_translations = if let Some(ref cleaned) = cleaned_data {
-        let translations_map: std::collections::HashMap<usize, String> = translations.into_iter().collect();
+        let translations_map: std::collections::HashMap<usize, String> =
+            translations.into_iter().collect();
         reapply_all_tags(cleaned, &translations_map, &cleaner_config)
     } else {
         translations
@@ -518,17 +528,15 @@ Examples:
 
     let response = client.translate(&prompt, "").await?;
 
-    fn strip_think_blocks(input: &str) -> String {
+fn strip_think_blocks(input: &str) -> String {
         let mut output = input.to_string();
-        loop {
-            let Some(start) = output.find("<think>") else {
+        while let Some(start) = output.find("<think>") {
+            let remaining = &output[start + 7..];
+            let Some(end) = remaining.find("") else {
                 break;
             };
-            let Some(end) = output[start + 7..].find("</think>") else {
-                break;
-            };
-            let end = start + 7 + end + 8;
-            output.replace_range(start..end, "");
+            let full_end = start + 7 + end + 8;
+            output.replace_range(start..full_end, "");
         }
         output
     }
@@ -629,13 +637,22 @@ async fn continue_translation(
 
 /// Análise de "lixo" em arquivo ASS
 #[tauri::command]
-async fn analyze_subtitle_clutter(file: SubtitleFile) -> Result<text_cleaner::AssClutterAnalysis, String> {
+async fn analyze_subtitle_clutter(
+    file: SubtitleFile,
+) -> Result<text_cleaner::AssClutterAnalysis, String> {
     use text_cleaner::analyze_ass_clutter;
-    
-    let entries: Vec<(String, Option<String>)> = file.entries.iter()
-        .map(|e| (e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+
+    let entries: Vec<(String, Option<String>)> = file
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.text.clone(),
+                e.metadata.as_ref().and_then(|m| m.style.clone()),
+            )
+        })
         .collect();
-    
+
     Ok(analyze_ass_clutter(&entries))
 }
 
@@ -646,16 +663,33 @@ async fn preview_cleaned_text(
     config: TextCleanerConfig,
 ) -> Result<Vec<(usize, String, String, bool)>, String> {
     // (index, original, cleaned, should_skip)
-    let entries: Vec<(usize, String, Option<String>)> = file.entries.iter()
-        .map(|e| (e.index, e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+    let entries: Vec<(usize, String, Option<String>)> = file
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.index,
+                e.text.clone(),
+                e.metadata.as_ref().and_then(|m| m.style.clone()),
+            )
+        })
         .collect();
-    
+
     let cleaned = clean_subtitle_entries(&entries, &config);
-    
-    let result = cleaned.mappings.iter()
-        .map(|m| (m.entry_index, m.original_text.clone(), m.clean_text.clone(), m.should_skip_translation))
+
+    let result = cleaned
+        .mappings
+        .iter()
+        .map(|m| {
+            (
+                m.entry_index,
+                m.original_text.clone(),
+                m.clean_text.clone(),
+                m.should_skip_translation,
+            )
+        })
         .collect();
-    
+
     Ok(result)
 }
 

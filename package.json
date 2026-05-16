@@ -67,7 +67,7 @@
     "tailwindcss": "^4.1.18",
     "vaul": "^1.1.2",
     "zod": "^4.3.5",
-    "zustand": "^5.0.10"
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
