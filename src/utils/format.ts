@@ -123,6 +123,52 @@ export function stripAssTags(text: string): string {
   return cleaned.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Strip VTT subtitle tags from text.
+ * VTT tags include: <v speaker>, <c.class>, <i>, <b>, <u>, <ruby>, <rt>
+ * Cue settings: align:start, position:50%, etc.
+ * Also handles WEBVTT region tags.
+ */
+export function stripVttTags(text: string): string {
+  if (!text) return '';
+
+  let cleaned = text;
+
+  // Remove voice tags: <v speaker> and </v>
+  cleaned = cleaned.replace(/<v[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<\/v>/gi, '');
+
+  // Remove class tags: <c.class> and </c>
+  cleaned = cleaned.replace(/<c[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<\/c>/gi, '');
+
+  // Remove basic formatting: <i>, </i>, <b>, </b>, <u>, </u>
+  cleaned = cleaned.replace(/<\/?[ibu]>/gi, '');
+
+  // Remove ruby/rt tags: <ruby>, </ruby>, <rt>, </rt>
+  cleaned = cleaned.replace(/<\/?ruby>/gi, '');
+  cleaned = cleaned.replace(/<\/?rt>/gi, '');
+
+  // Remove cue settings (align:start, position:50%, etc)
+  cleaned = cleaned.replace(/\b(align|position|vertical|region):[^\s]+/g, '');
+
+  // Remove timestamp tags (not typically in text but just in case)
+  cleaned = cleaned.replace(/<\/?[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}>/g, '');
+
+  // Clean up multiple spaces and trim
+  return cleaned.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Strip both ASS and VTT subtitle tags from text.
+ * Use this for text that could be from any subtitle format.
+ */
+export function stripSubtitleTags(text: string): string {
+  if (!text) return '';
+  // First strip VTT tags, then ASS tags (order matters for some edge cases)
+  return stripAssTags(stripVttTags(text));
+}
+
 export function formatBytes(bytes: number, decimals = 2): string {
   if (bytes === 0) return '0 Bytes';
 
