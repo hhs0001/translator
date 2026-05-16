@@ -17,7 +17,6 @@ static TAG_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         Regex::new(r"<v\.[^>]*>").unwrap(),
         Regex::new(r"</v>").unwrap(),
         Regex::new(r"<v>").unwrap(),
-        Regex::new(r"</v>").unwrap(),
         Regex::new(r"<lang\.[^>]*>").unwrap(),
         Regex::new(r"</lang>").unwrap(),
         Regex::new(r"<b>").unwrap(),
@@ -111,7 +110,7 @@ pub fn parse(content: &str) -> Result<SubtitleFile, String> {
 
         let cue_settings_start = ts_caps.get(0).map(|m| m.end()).unwrap_or(0);
         let cue_settings_str = &line[cue_settings_start..];
-        let metadata = parse_cue_settings(cue_settings_str);
+        let mut metadata = parse_cue_settings(cue_settings_str);
 
         index += 1;
 
