@@ -7,10 +7,8 @@ static TIMESTAMP_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("invalid timestamp regex")
 });
 
-static CUE_SETTING_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"([\w-]+):([^\s]+)")
-        .expect("invalid cue setting regex")
-});
+static CUE_SETTING_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"([\w-]+):([^\s]+)").expect("invalid cue setting regex"));
 
 static TAG_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     vec![
@@ -213,10 +211,7 @@ with multiple lines
         let result = parse(content).unwrap();
         assert_eq!(result.entries.len(), 2);
         assert_eq!(result.entries[0].text, "Hello World");
-        assert_eq!(
-            result.entries[1].text,
-            "This is a test with multiple lines"
-        );
+        assert_eq!(result.entries[1].text, "This is a test with multiple lines");
     }
 
     #[test]

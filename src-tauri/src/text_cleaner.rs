@@ -1,12 +1,12 @@
 //! Motor de limpeza de texto para legendas
-//! 
+//!
 //! Extrai texto puro de tags ASS/SSA para envio à API de tradução,
 //! e reaplica as tags originais após a tradução.
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 /// Configuração do motor de limpeza
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,9 +32,7 @@ impl Default for TextCleanerConfig {
             enabled: true,
             preserve_basic_formatting: true,
             tags_to_remove: vec![],
-            ignored_styles: vec![
-                "draw".to_string(),
-            ],
+            ignored_styles: vec!["draw".to_string()],
             preserve_karaoke_timing: false,
             preserve_positioning: false,
         }
@@ -73,9 +71,7 @@ pub struct CleanedSubtitle {
 }
 
 // Regex para extrair tags ASS
-static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\{([^}]*)\}").unwrap()
-});
+static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
 
 // Tags de formatação básica
 static BASIC_FORMATTING_TAGS: &[&str] = &["b", "i", "u", "s", "strike"];
