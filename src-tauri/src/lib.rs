@@ -265,6 +265,7 @@ impl Drop for CancelHandle {
 
 /// Traduz arquivo completo com batching e auto-continue
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 async fn translate_subtitle_full(
     app: tauri::AppHandle,
     cancel_state: tauri::State<'_, TranslationCancelState>,
@@ -528,18 +529,18 @@ Examples:
 
     let response = client.translate(&prompt, "").await?;
 
-    fn strip_think_blocks(input: &str) -> String {
+fn strip_think_blocks(input: &str) -> String {
         let mut output = input.to_string();
-        loop {
-            let Some(start) = output.find("<think>") else {
+        while let Some(start) = output.find("<think>") {
+            if let Some(end) = output[start + 7..].find("") {
+                let end = start + 7 + end + 8;
+                output.replace_range(start..end, "");
+            } else {
                 break;
-            };
-            let Some(end) = output[start + 7..].find("</think>") else {
-                break;
-            };
-            let end = start + 7 + end + 8;
-            output.replace_range(start..end, "");
+            }
         }
+        output
+    }
         output
     }
 

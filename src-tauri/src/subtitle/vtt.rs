@@ -50,10 +50,8 @@ fn parse_cue_settings(line: &str) -> Option<SubtitleMetadata> {
         let key = &cap[1];
         let value = &cap[2];
         match key {
-            "align" => {
-                if metadata.style.is_none() {
-                    metadata.style = Some(value.to_string());
-                }
+            "align" if metadata.style.is_none() => {
+                metadata.style = Some(value.to_string());
             }
             "position" => {}
             "line" => {}

@@ -151,16 +151,16 @@ fn default_parallel_requests() -> usize {
 /// Removes <think>...</think> blocks from LLM responses
 fn strip_think_blocks(input: &str) -> String {
     let mut output = input.to_string();
-    loop {
-        let Some(start) = output.find("<think>") else {
+    while let Some(start) = output.find("<think>") {
+        if let Some(end) = output[start + 7..].find("") {
+            let end = start + 7 + end + 8;
+            output.replace_range(start..end, "");
+        } else {
             break;
-        };
-        let Some(end) = output[start + 7..].find("</think>") else {
-            break;
-        };
-        let end = start + 7 + end + 8;
-        output.replace_range(start..end, "");
+        }
     }
+    output
+}
     output
 }
 
@@ -670,6 +670,7 @@ impl LlmClient {
 
     /// Translates a single batch with streaming (OpenAI format only)
     /// Emits events as each entry is translated
+    #[allow(clippy::too_many_arguments)]
     async fn translate_streaming_batch(
         &self,
         system_prompt: &str,

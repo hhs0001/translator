@@ -45,10 +45,8 @@ pub fn parse(content: &str) -> Result<SubtitleFile, String> {
                     headers.fonts.push(line.to_string());
                 }
             }
-            "graphics" => {
-                if !line.is_empty() {
-                    headers.graphics.push(line.to_string());
-                }
+            "graphics" if !line.is_empty() => {
+                headers.graphics.push(line.to_string());
             }
             "events" => {
                 // Captura o formato dos diálogos
