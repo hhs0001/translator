@@ -1,12 +1,12 @@
 //! Motor de limpeza de texto para legendas
-//! 
+//!
 //! Extrai texto puro de tags ASS/SSA para envio à API de tradução,
 //! e reaplica as tags originais após a tradução.
 
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 
 /// Configuração do motor de limpeza
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,9 +32,7 @@ impl Default for TextCleanerConfig {
             enabled: true,
             preserve_basic_formatting: true,
             tags_to_remove: vec![],
-            ignored_styles: vec![
-                "draw".to_string(),
-            ],
+            ignored_styles: vec!["draw".to_string()],
             preserve_karaoke_timing: false,
             preserve_positioning: false,
         }
@@ -73,20 +71,17 @@ pub struct CleanedSubtitle {
 }
 
 // Regex para extrair tags ASS
-static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"\{([^}]*)\}").unwrap()
-});
+static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
 
 // Tags de formatação básica
 static BASIC_FORMATTING_TAGS: &[&str] = &["b", "i", "u", "s", "strike"];
 
 // Tags de efeito visual (sempre removidas se não preservar positioning)
 static VISUAL_EFFECT_TAGS: &[&str] = &[
-    "pos", "move", "org", "fad", "fade", "t", "frx", "fry", "frz",
-    "fscx", "fscy", "fax", "fay", "blur", "be", "c", "1c", "2c", "3c", "4c",
-    "alpha", "1a", "2a", "3a", "4a", "an", "a", "fn", "fs", "fsp", "fsc",
-    "clip", "iclip", "p", "pbo", "bord", "shad", "xbord", "ybord", "xshad", "yshad",
-    "jitter", "kt", "ktl", "ktr",
+    "pos", "move", "org", "fad", "fade", "t", "frx", "fry", "frz", "fscx", "fscy", "fax", "fay",
+    "blur", "be", "c", "1c", "2c", "3c", "4c", "alpha", "1a", "2a", "3a", "4a", "an", "a", "fn",
+    "fs", "fsp", "fsc", "clip", "iclip", "p", "pbo", "bord", "shad", "xbord", "ybord", "xshad",
+    "yshad", "jitter", "kt", "ktl", "ktr",
 ];
 
 // Tags de karaoke/timing
@@ -102,38 +97,40 @@ fn extract_tags(text: &str) -> (String, Vec<(usize, String)>) {
     for cap in TAGS_REGEX.captures_iter(text) {
         let mat = cap.get(0).unwrap();
         let tag_content = cap.get(1).unwrap().as_str();
-        
+
         // Adiciona texto antes da tag
         let before_tag = &text[last_end..mat.start()];
         clean_text.push_str(before_tag);
         offset += before_tag.len();
-        
+
         // Armazena a tag com sua posição
         tags.push((offset, tag_content.to_string()));
-        
+
         last_end = mat.end();
     }
-    
+
     // Adiciona resto do texto
     clean_text.push_str(&text[last_end..]);
-    
+
     // Converte \N e \n para espaços ou mantém como quebras
     clean_text = clean_text.replace("\\N", "\n").replace("\\n", "\n");
     // Remove \\h (hard space)
     clean_text = clean_text.replace("\\h", " ");
-    
+
     (clean_text, tags)
 }
 
 /// Analisa tags e separa em categorias
-fn categorize_tags(tags: Vec<(usize, String)>) -> (Vec<String>, Vec<String>, HashMap<usize, Vec<String>>) {
+fn categorize_tags(
+    tags: Vec<(usize, String)>,
+) -> (Vec<String>, Vec<String>, HashMap<usize, Vec<String>>) {
     let mut opening = Vec::new();
     let mut closing = Vec::new();
     let mut inline: HashMap<usize, Vec<String>> = HashMap::new();
-    
+
     for (pos, tag_content) in tags {
         // Verifica se é tag de fechamento (reset)
-        if tag_content.starts_with("r") || tag_content == "0" {
+        if tag_content.starts_with('r') || tag_content == "0" {
             closing.push(format!("{{{}}}", tag_content));
         } else if tag_content.starts_with('/') {
             // Tag de fechamento explícito
@@ -143,34 +140,34 @@ fn categorize_tags(tags: Vec<(usize, String)>) -> (Vec<String>, Vec<String>, Has
             if pos == 0 {
                 opening.push(format!("{{{}}}", tag_content));
             } else {
-                inline.entry(pos).or_default().push(format!("{{{}}}", tag_content));
+                inline
+                    .entry(pos)
+                    .or_default()
+                    .push(format!("{{{}}}", tag_content));
             }
         }
     }
-    
+
     (opening, closing, inline)
 }
 
 /// Filtra tags baseado na configuração
-fn filter_tags(
-    tags: Vec<(usize, String)>, 
-    config: &TextCleanerConfig
-) -> Vec<(usize, String)> {
+fn filter_tags(tags: Vec<(usize, String)>, config: &TextCleanerConfig) -> Vec<(usize, String)> {
     let mut result = Vec::new();
-    
+
     for (pos, tag_content) in tags {
         let parts: Vec<&str> = tag_content.split(|c| c == '\\' || c == '(').collect();
-        
+
         let mut should_keep = false;
         let mut _is_visual_effect = false;
         let mut _is_karaoke = false;
-        
+
         for part in parts {
             let trimmed = part.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            
+
             // Verifica se é tag básica
             if config.preserve_basic_formatting {
                 for basic_tag in BASIC_FORMATTING_TAGS {
@@ -180,7 +177,7 @@ fn filter_tags(
                     }
                 }
             }
-            
+
             // Verifica se é karaoke
             for karaoke_tag in KARAOKE_TAGS {
                 if trimmed.starts_with(karaoke_tag) {
@@ -191,19 +188,20 @@ fn filter_tags(
                     break;
                 }
             }
-            
+
             // Verifica se é efeito visual
             for visual_tag in VISUAL_EFFECT_TAGS {
                 if trimmed.starts_with(visual_tag) {
                     _is_visual_effect = true;
-                    if config.preserve_positioning && 
-                       (*visual_tag == "pos" || *visual_tag == "move" || *visual_tag == "org") {
+                    if config.preserve_positioning
+                        && (*visual_tag == "pos" || *visual_tag == "move" || *visual_tag == "org")
+                    {
                         should_keep = true;
                     }
                     break;
                 }
             }
-            
+
             // Verifica tags customizadas a remover
             for custom_remove in &config.tags_to_remove {
                 if trimmed.starts_with(custom_remove) {
@@ -212,13 +210,13 @@ fn filter_tags(
                 }
             }
         }
-        
+
         // Mantém se é básica, ou se é posicionamento preservado
         if should_keep {
             result.push((pos, tag_content));
         }
     }
-    
+
     result
 }
 
@@ -230,12 +228,15 @@ pub fn clean_text_for_translation(
     config: &TextCleanerConfig,
 ) -> TextMapping {
     // Verifica se o estilo deve ser ignorado
-    let should_skip = style.map(|s| {
-        config.ignored_styles.iter().any(|ignored| 
-            s.to_lowercase().contains(&ignored.to_lowercase())
-        )
-    }).unwrap_or(false);
-    
+    let should_skip = style
+        .map(|s| {
+            config
+                .ignored_styles
+                .iter()
+                .any(|ignored| s.to_lowercase().contains(&ignored.to_lowercase()))
+        })
+        .unwrap_or(false);
+
     if !config.enabled || should_skip {
         // Retorna mapeamento sem limpeza
         return TextMapping {
@@ -249,16 +250,16 @@ pub fn clean_text_for_translation(
             should_skip_translation: should_skip,
         };
     }
-    
+
     // Extrai tags
     let (clean_text, tags) = extract_tags(text);
-    
+
     // Filtra tags
     let filtered_tags = filter_tags(tags, config);
-    
+
     // Categoriza tags
     let (opening, closing, inline) = categorize_tags(filtered_tags);
-    
+
     TextMapping {
         entry_index,
         original_text: text.to_string(),
@@ -278,17 +279,17 @@ pub fn clean_subtitle_entries(
 ) -> CleanedSubtitle {
     let mut mappings = Vec::new();
     let mut texts_to_translate = Vec::new();
-    
+
     for (index, text, style) in entries {
         let mapping = clean_text_for_translation(text, style.as_deref(), *index, config);
-        
+
         if !mapping.should_skip_translation {
             texts_to_translate.push((*index, mapping.clean_text.clone()));
         }
-        
+
         mappings.push(mapping);
     }
-    
+
     CleanedSubtitle {
         mappings,
         texts_to_translate,
@@ -308,62 +309,65 @@ pub fn reapply_tags(
             translated_text.to_string()
         };
     }
-    
+
     // Converte quebras de volta para \N
     let text_with_newlines = translated_text.replace('\n', "\\N");
-    
+
     let mut result = String::new();
-    
+
     // Adiciona tags de abertura
     for tag in &original_mapping.opening_tags {
         result.push_str(tag);
     }
-    
+
     // Reconstrói o texto com tags inline
     let _char_positions: Vec<(usize, char)> = text_with_newlines.chars().enumerate().collect();
-    
+
     // Ordena posições das tags inline
     let mut sorted_inline: Vec<_> = original_mapping.inline_tags.iter().collect();
     sorted_inline.sort_by_key(|(pos, _)| **pos);
-    
+
     // Se houver tags inline, precisamos inseri-las
     if !sorted_inline.is_empty() {
         let _current_pos = 0;
-        
+
         for (_original_pos, tags) in sorted_inline {
             // Insere tags na posição correspondente
             for tag in tags {
                 result.push_str(tag);
             }
         }
-        
+
         result.push_str(&text_with_newlines);
     } else {
         result.push_str(&text_with_newlines);
     }
-    
+
     // Adiciona tags de fechamento
     for tag in &original_mapping.closing_tags {
         result.push_str(tag);
     }
-    
-    // Se não há tags no resultado mas havia no original, 
+
+    // Se não há tags no resultado mas havia no original,
     // mantém o formato básico se preserve_basic_formatting estiver ativo
     if result.is_empty() && !original_mapping.opening_tags.is_empty() {
         result = original_mapping.original_text.clone();
     }
-    
+
     // Se o resultado não tem nenhuma tag mas o original tinha,
     // vamos tentar preservar a estrutura básica
     if !result.contains('{') && original_mapping.original_text.contains('{') {
         // Extrai só as tags de formatação básica do original
         let (_original_clean, tags) = extract_tags(&original_mapping.original_text);
-        let basic_tags: Vec<_> = tags.into_iter()
+        let basic_tags: Vec<_> = tags
+            .into_iter()
             .filter(|(_, tag)| {
-                BASIC_FORMATTING_TAGS.iter().any(|basic| tag.starts_with(basic))
+                BASIC_FORMATTING_TAGS
+                    .iter()
+                    .any(|basic| tag.starts_with(basic))
             })
             .collect();
-        
+
         if !basic_tags.is_empty() {
             let (opening, closing, _) = categorize_tags(basic_tags);
             result = String::new();
@@ -376,7 +380,7 @@ pub fn reapply_tags(
             }
         }
     }
-    
+
     result
 }
 
@@ -387,7 +391,7 @@ pub fn reapply_all_tags(
     config: &TextCleanerConfig,
 ) -> Vec<(usize, String)> {
     let mut results = Vec::new();
-    
+
     for mapping in &cleaned.mappings {
         if mapping.should_skip_translation {
             // Mantém o texto original
@@ -400,7 +404,7 @@ pub fn reapply_all_tags(
             results.push((mapping.entry_index, mapping.original_text.clone()));
         }
     }
-    
+
     results
 }
 
@@ -408,7 +412,7 @@ pub fn reapply_all_tags(
 #[allow(dead_code)]
 pub fn has_heavy_visual_effects(text: &str) -> bool {
     let (_, tags) = extract_tags(text);
-    
+
     for (_, tag_content) in tags {
         for visual_tag in VISUAL_EFFECT_TAGS {
             if tag_content.contains(&format!("\\{}", visual_tag)) {
@@ -416,7 +420,7 @@ pub fn has_heavy_visual_effects(text: &str) -> bool {
             }
         }
     }
-    
+
     false
 }
 
@@ -427,19 +431,19 @@ pub fn analyze_ass_clutter(entries: &[(String, Option<String>)]) -> AssClutterAn
     let mut lines_with_karaoke = 0;
     let mut lines_with_positioning = 0;
     let mut style_counts: HashMap<String, usize> = HashMap::new();
-    
+
     for (text, style) in entries {
         total_lines += 1;
-        
+
         if let Some(s) = style {
             *style_counts.entry(s.clone()).or_default() += 1;
         }
-        
+
         let (_, tags) = extract_tags(text);
         let mut has_effects = false;
         let mut has_karaoke = false;
         let mut has_positioning = false;
-        
+
         for (_, tag_content) in tags {
             for visual_tag in VISUAL_EFFECT_TAGS {
                 if tag_content.contains(&format!("\\{}", visual_tag)) {
@@ -455,12 +459,18 @@ pub fn analyze_ass_clutter(entries: &[(String, Option<String>)]) -> AssClutterAn
                 has_positioning = true;
             }
         }
-        
-        if has_effects { lines_with_effects += 1; }
-        if has_karaoke { lines_with_karaoke += 1; }
-        if has_positioning { lines_with_positioning += 1; }
+
+        if has_effects {
+            lines_with_effects += 1;
+        }
+        if has_karaoke {
+            lines_with_karaoke += 1;
+        }
+        if has_positioning {
+            lines_with_positioning += 1;
+        }
     }
-    
+
     AssClutterAnalysis {
         total_lines,
         lines_with_effects,
@@ -503,20 +513,52 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_tags_no_tags() {
+        let text = "Plain text without tags";
+        let (clean, tags) = extract_tags(text);
+        assert_eq!(clean, "Plain text without tags");
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn test_extract_tags_multiple_tags_same_position() {
+        let text = r"{\i1\b1}Bold and Italic";
+        let (clean, tags) = extract_tags(text);
+        assert_eq!(clean, "Bold and Italic");
+        assert_eq!(tags.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_tags_hard_space() {
+        let text = r"Hello\hWorld";
+        let (clean, _) = extract_tags(text);
+        assert_eq!(clean, "Hello World");
+    }
+
+    #[test]
+    fn test_extract_tags_newline_conversion() {
+        let text = r"Line1\NLine2";
+        let (clean, _) = extract_tags(text);
+        assert_eq!(clean, "Line1\nLine2");
+    }
+
+    #[test]
+    fn test_extract_tags_real_newline() {
+        let text = "Line1\nLine2";
+        let (clean, _) = extract_tags(text);
+        assert_eq!(clean, "Line1\nLine2");
+    }
+
+    #[test]
     fn test_clean_text_basic() {
         let config = TextCleanerConfig {
             enabled: true,
             preserve_basic_formatting: true,
             ..Default::default()
         };
-        
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
-        
+
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
+
         assert_eq!(mapping.clean_text, "Hello World");
         assert!(mapping.opening_tags.iter().any(|t| t.contains("i1")));
     }
@@ -529,15 +571,44 @@ mod tests {
             preserve_positioning: false,
             ..Default::default()
         };
-        
+
         let mapping = clean_text_for_translation(
             r"{\pos(640,360)\blur1\c&HFFFFFF&}Hello World",
             None,
             1,
             &config,
         );
-        
+
         assert_eq!(mapping.clean_text, "Hello World");
+        assert!(mapping.opening_tags.is_empty());
+    }
+
+    #[test]
+    fn test_clean_text_preserve_positioning() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: false,
+            preserve_positioning: true,
+            ..Default::default()
+        };
+
+        let mapping = clean_text_for_translation(r"{\pos(640,360)}Hello World", None, 1, &config);
+
+        assert_eq!(mapping.clean_text, "Hello World");
+        assert!(!mapping.opening_tags.is_empty());
+        assert!(mapping.opening_tags.iter().any(|t| t.contains("pos")));
+    }
+
+    #[test]
+    fn test_clean_text_disabled() {
+        let config = TextCleanerConfig {
+            enabled: false,
+            ..Default::default()
+        };
+
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
+
+        assert_eq!(mapping.clean_text, r"{\i1}Hello World{\i0}");
         assert!(mapping.opening_tags.is_empty());
     }
 
@@ -548,17 +619,42 @@ mod tests {
             preserve_basic_formatting: true,
             ..Default::default()
         };
-        
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
-        
+
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
+
         let result = reapply_tags("Olá Mundo", &mapping, &config);
         assert!(result.contains("{\\i1}"));
         assert!(result.contains("Olá Mundo"));
+    }
+
+    #[test]
+    fn test_reapply_tags_with_closing_tag() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+
+        let mapping = clean_text_for_translation(r"{\i1}Hello World", None, 1, &config);
+
+        let result = reapply_tags("Olá Mundo", &mapping, &config);
+        assert!(result.contains("Olá Mundo"));
+    }
+
+    #[test]
+    fn test_reapply_tags_skip_translation() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+
+        let mapping =
+            clean_text_for_translation(r"{\i1}Hello World{\i0}", Some("Title"), 1, &config);
+
+        let original = r"{\i1}Hello World{\i0}";
+        let result = reapply_tags("Ignored", &mapping, &config);
+        assert_eq!(result, original);
     }
 
     #[test]
@@ -568,14 +664,35 @@ mod tests {
             ignored_styles: vec!["Title".to_string()],
             ..Default::default()
         };
-        
-        let mapping = clean_text_for_translation(
-            "Some text",
-            Some("Title1"),
-            1,
-            &config,
-        );
-        
+
+        let mapping = clean_text_for_translation("Some text", Some("Title1"), 1, &config);
+
+        assert!(mapping.should_skip_translation);
+    }
+
+    #[test]
+    fn test_ignored_styles_case_insensitive() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            ignored_styles: vec!["TITLE".to_string()],
+            ..Default::default()
+        };
+
+        let mapping = clean_text_for_translation("Some text", Some("title1"), 1, &config);
+
+        assert!(mapping.should_skip_translation);
+    }
+
+    #[test]
+    fn test_ignored_styles_partial_match() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            ignored_styles: vec!["comment".to_string()],
+            ..Default::default()
+        };
+
+        let mapping = clean_text_for_translation("Some text", Some("Commentator"), 1, &config);
+
         assert!(mapping.should_skip_translation);
     }
 
@@ -584,5 +701,302 @@ mod tests {
         assert!(has_heavy_visual_effects(r"{\pos(100,200)}Hello"));
         assert!(has_heavy_visual_effects(r"{\blur1\frz10}World"));
         assert!(!has_heavy_visual_effects(r"{\i1}Simple{\i0}"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_false_for_basic_formatting() {
+        assert!(!has_heavy_visual_effects(r"{\i1}{\b1}Text{\b0}{\i0}"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_with_blur() {
+        assert!(has_heavy_visual_effects(r"{\blur0.5}Text"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_with_frz() {
+        assert!(has_heavy_visual_effects(r"{\frz45}Rotated Text"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_with_clip() {
+        assert!(has_heavy_visual_effects(r"{\clip(0,0,100,100)}Clipped"));
+    }
+
+    #[test]
+    fn test_reapply_all_tags() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+
+        let entries = vec![
+            (
+                1,
+                r"{\i1}Hello{\i0}".to_string(),
+                Some("Default".to_string()),
+            ),
+            (2, "Plain text".to_string(), None),
+        ];
+
+        let cleaned = clean_subtitle_entries(&entries, &config);
+
+        let translations: HashMap<usize, String> =
+            [(1, "Olá".to_string()), (2, "Texto simples".to_string())]
+                .into_iter()
+                .collect();
+
+        let results = reapply_all_tags(&cleaned, &translations, &config);
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].1.contains("Olá"));
+        assert_eq!(results[1].1, "Texto simples");
+    }
+
+    #[test]
+    fn test_reapply_all_tags_partial_translation() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+
+        let entries = vec![
+            (1, r"{\i1}Hello{\i0}".to_string(), None),
+            (2, "Original 2".to_string(), None),
+        ];
+
+        let cleaned = clean_subtitle_entries(&entries, &config);
+
+        let translations: HashMap<usize, String> = [(1, "Olá".to_string())].into_iter().collect();
+
+        let results = reapply_all_tags(&cleaned, &translations, &config);
+
+        assert_eq!(results.len(), 2);
+        assert!(results[0].1.contains("Olá"));
+        assert_eq!(results[1].1, "Original 2");
+    }
+
+    #[test]
+    fn test_clean_subtitle_entries_all_skipped() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            ignored_styles: vec!["comment".to_string()],
+            ..Default::default()
+        };
+
+        let entries = vec![
+            (1, "Comment 1".to_string(), Some("Comment".to_string())),
+            (2, "Comment 2".to_string(), Some("Comment".to_string())),
+        ];
+
+        let cleaned = clean_subtitle_entries(&entries, &config);
+
+        assert!(cleaned.texts_to_translate.is_empty());
+        assert_eq!(cleaned.mappings.len(), 2);
+        assert!(cleaned.mappings.iter().all(|m| m.should_skip_translation));
+    }
+
+    #[test]
+    fn test_clean_subtitle_entries_empty_input() {
+        let config = TextCleanerConfig::default();
+        let entries: Vec<(usize, String, Option<String>)> = vec![];
+
+        let cleaned = clean_subtitle_entries(&entries, &config);
+
+        assert!(cleaned.mappings.is_empty());
+        assert!(cleaned.texts_to_translate.is_empty());
+    }
+
+    #[test]
+    fn test_text_mapping_structure() {
+        let mapping = TextMapping {
+            entry_index: 5,
+            original_text: r"{\i1}Test{\i0}".to_string(),
+            clean_text: "Test".to_string(),
+            opening_tags: vec![r"{\i1}".to_string()],
+            closing_tags: vec![r"{\i0}".to_string()],
+            inline_tags: HashMap::new(),
+            style: Some("Default".to_string()),
+            should_skip_translation: false,
+        };
+
+        assert_eq!(mapping.entry_index, 5);
+        assert_eq!(mapping.clean_text, "Test");
+        assert!(!mapping.should_skip_translation);
+    }
+
+    #[test]
+    fn test_cleaned_subtitle_structure() {
+        let mapping = TextMapping {
+            entry_index: 1,
+            original_text: "Original".to_string(),
+            clean_text: "Clean".to_string(),
+            opening_tags: vec![],
+            closing_tags: vec![],
+            inline_tags: HashMap::new(),
+            style: None,
+            should_skip_translation: false,
+        };
+
+        let cleaned = CleanedSubtitle {
+            mappings: vec![mapping],
+            texts_to_translate: vec![(1, "Clean".to_string())],
+        };
+
+        assert_eq!(cleaned.mappings.len(), 1);
+        assert_eq!(cleaned.texts_to_translate.len(), 1);
+    }
+
+    #[test]
+    fn test_analyze_ass_clutter() {
+        let entries = vec![
+            (
+                r"{\pos(100,200)}Hello".to_string(),
+                Some("Default".to_string()),
+            ),
+            (r"{\blur1}World".to_string(), Some("Effect".to_string())),
+            (r"{\k100}Karaoke".to_string(), Some("Karaoke".to_string())),
+            ("Normal text".to_string(), None),
+        ];
+
+        let analysis = analyze_ass_clutter(&entries);
+
+        assert_eq!(analysis.total_lines, 4);
+        assert_eq!(analysis.lines_with_effects, 2);
+        assert_eq!(analysis.lines_with_positioning, 1);
+    }
+
+    #[test]
+    fn test_analyze_ass_clutter_empty() {
+        let entries: Vec<(String, Option<String>)> = vec![];
+        let analysis = analyze_ass_clutter(&entries);
+
+        assert_eq!(analysis.total_lines, 0);
+        assert_eq!(analysis.lines_with_effects, 0);
+    }
+
+    #[test]
+    fn test_categorize_tags_opening_and_closing() {
+        let tags = vec![(0, "i1".to_string()), (6, "i0".to_string())];
+
+        let (opening, closing, inline) = categorize_tags(tags);
+
+        assert_eq!(opening.len(), 1);
+        assert_eq!(closing.len(), 1);
+        assert!(inline.is_empty());
+    }
+
+    #[test]
+    fn test_categorize_tags_inline() {
+        let tags = vec![(0, "i1".to_string()), (6, "b1".to_string())];
+
+        let (opening, closing, inline) = categorize_tags(tags);
+
+        assert_eq!(opening.len(), 1);
+        assert!(closing.is_empty());
+        assert_eq!(inline.len(), 1);
+    }
+
+    #[test]
+    fn test_categorize_tags_reset_tag() {
+        let tags = vec![(0, "r".to_string())];
+
+        let (opening, closing, inline) = categorize_tags(tags);
+
+        assert!(opening.is_empty());
+        assert_eq!(closing.len(), 1);
+    }
+
+    #[test]
+    fn test_categorize_tags_explicit_close() {
+        let tags = vec![(0, "/i".to_string())];
+
+        let (opening, closing, inline) = categorize_tags(tags);
+
+        assert!(opening.is_empty());
+        assert_eq!(closing.len(), 1);
+    }
+
+    #[test]
+    fn test_filter_tags_preserve_basic() {
+        let tags = vec![(0, "i1".to_string()), (0, "pos(100,100)".to_string())];
+
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            preserve_positioning: false,
+            ..Default::default()
+        };
+
+        let filtered = filter_tags(tags, &config);
+
+        assert_eq!(filtered.len(), 1);
+        assert!(filtered[0].1.contains("i1"));
+    }
+
+    #[test]
+    fn test_filter_tags_custom_remove() {
+        let tags = vec![(0, "\\an8".to_string())];
+
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            tags_to_remove: vec!["\\an".to_string()],
+            ..Default::default()
+        };
+
+        let filtered = filter_tags(tags, &config);
+
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn test_reapply_tags_converts_newlines_to_backslash_n() {
+        let config = TextCleanerConfig::default();
+
+        let mapping = TextMapping {
+            entry_index: 1,
+            original_text: r"{\i1}Test{\i0}".to_string(),
+            clean_text: "Test".to_string(),
+            opening_tags: vec![r"{\i1}".to_string()],
+            closing_tags: vec![r"{\i0}".to_string()],
+            inline_tags: HashMap::new(),
+            style: None,
+            should_skip_translation: false,
+        };
+
+        let result = reapply_tags("Line1\nLine2", &mapping, &config);
+
+        assert!(result.contains(r"\N"));
+    }
+
+    #[test]
+    fn test_reapply_tags_preserves_basic_when_no_tags_in_result() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
+
+        let result = reapply_tags("Translated", &mapping, &config);
+
+        assert!(result.contains("{\\i1}"));
+        assert!(result.contains("Translated"));
+    }
+
+    #[test]
+    fn test_ass_clutter_analysis_estimate() {
+        let entries = vec![
+            (r"{\pos(100,200)}Text".to_string(), None),
+            (r"{\blur1}Text".to_string(), None),
+        ];
+
+        let analysis = analyze_ass_clutter(&entries);
+
+        assert!(analysis.estimated_tokens_saved > 0);
     }
 }

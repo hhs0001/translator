@@ -748,7 +748,10 @@ CRITICAL FORMAT INSTRUCTIONS:
                 Err(e) => {
                     retries += 1;
                     if retries > max_retries {
-                        return Err(format!("Batch {}: Translation request failed after {} retries: {}", batch_index, max_retries, e));
+                        return Err(format!(
+                            "Batch {}: Translation request failed after {} retries: {}",
+                            batch_index, max_retries, e
+                        ));
                     }
                     check_cancelled(&cancel_flag)?;
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -761,7 +764,10 @@ CRITICAL FORMAT INSTRUCTIONS:
                 let body = response.text().await.unwrap_or_default();
                 retries += 1;
                 if retries > max_retries {
-                    return Err(format!("Batch {}: Translation API error {} after {} retries: {}", batch_index, status, max_retries, body));
+                    return Err(format!(
+                        "Batch {}: Translation API error {} after {} retries: {}",
+                        batch_index, status, max_retries, body
+                    ));
                 }
                 check_cancelled(&cancel_flag)?;
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -800,14 +806,11 @@ CRITICAL FORMAT INSTRUCTIONS:
                                         for ch in content.chars() {
                                             if ch == '\n' {
                                                 // End of a line - try to parse
-                                                let line_content =
-                                                    current_text.trim().to_string();
-                                                if let Some((idx, text)) =
-                                                    parse_translation_line(
-                                                        &line_content,
-                                                        NEWLINE_PLACEHOLDER,
-                                                    )
-                                                {
+                                                let line_content = current_text.trim().to_string();
+                                                if let Some((idx, text)) = parse_translation_line(
+                                                    &line_content,
+                                                    NEWLINE_PLACEHOLDER,
+                                                ) {
                                                     // Validate ASS tag compatibility
                                                     let should_emit = original_map
                                                         .get(&idx)
@@ -834,10 +837,7 @@ CRITICAL FORMAT INSTRUCTIONS:
                             }
                             Err(e) => {
                                 #[cfg(debug_assertions)]
-                                eprintln!(
-                                    "Failed to parse SSE chunk: {} - JSON: {}",
-                                    e, json_str
-                                );
+                                eprintln!("Failed to parse SSE chunk: {} - JSON: {}", e, json_str);
                                 let _ = e;
                             }
                         }
@@ -849,9 +849,7 @@ CRITICAL FORMAT INSTRUCTIONS:
 
             // Process last line of the batch if any
             let line_content = current_text.trim().to_string();
-            if let Some((idx, text)) =
-                parse_translation_line(&line_content, NEWLINE_PLACEHOLDER)
-            {
+            if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
                 let should_emit = original_map
                     .get(&idx)
                     .map(|orig| Self::tags_compatible(orig, &text))
@@ -917,17 +915,19 @@ CRITICAL FORMAT INSTRUCTIONS:
                     let cancel_flag = cancel_flag.clone();
                     let original_map = &original_map;
                     let mut on_entry_clone = on_entry.clone();
-                    
+
                     futures.push(async move {
-                        let result = self.translate_streaming_batch(
-                            system_prompt,
-                            &batch,
-                            batch_idx,
-                            max_retries,
-                            cancel_flag,
-                            original_map,
-                            &mut on_entry_clone,
-                        ).await;
+                        let result = self
+                            .translate_streaming_batch(
+                                system_prompt,
+                                &batch,
+                                batch_idx,
+                                max_retries,
+                                cancel_flag,
+                                original_map,
+                                &mut on_entry_clone,
+                            )
+                            .await;
                         (batch_idx, result)
                     });
                 }
@@ -1359,5 +1359,542 @@ mod tests {
         let config = LlmConfig::default();
         assert!(config.endpoint.contains("localhost"));
         assert_eq!(config.api_key, "dummy");
+    }
+}
+
+#[cfg(test)]
+mod translation_integration_tests {
+    use super::*;
+    use crate::subtitle::{SubtitleEntry, SubtitleFile, SubtitleFormat, SubtitleMetadata};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+
+    fn create_test_config(endpoint: &str) -> LlmConfig {
+        LlmConfig {
+            endpoint: endpoint.to_string(),
+            api_key: "test-key".to_string(),
+            model: "test-model".to_string(),
+            api_format: ApiFormat::OpenAI,
+            headers: vec![],
+            reasoning_effort: ReasoningEffort::default(),
+            anthropic_thinking_enabled: false,
+            anthropic_thinking_budget_tokens: 1024,
+        }
+    }
+
+    fn create_test_subtitle_file() -> SubtitleFile {
+        SubtitleFile {
+            format: SubtitleFormat::Srt,
+            entries: vec![
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "00:00:01,000".to_string(),
+                    end_time: "00:00:04,000".to_string(),
+                    text: "Hello world".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "00:00:05,000".to_string(),
+                    end_time: "00:00:08,000".to_string(),
+                    text: "This is a test".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 3,
+                    start_time: "00:00:09,000".to_string(),
+                    end_time: "00:00:12,000".to_string(),
+                    text: "Goodbye".to_string(),
+                    metadata: None,
+                },
+            ],
+            headers: None,
+        }
+    }
+
+    fn create_ass_subtitle_file() -> SubtitleFile {
+        SubtitleFile {
+            format: SubtitleFormat::Ass,
+            entries: vec![
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "0:00:01.00".to_string(),
+                    end_time: "0:00:04.00".to_string(),
+                    text: r"{\i1}Hello{\i0} World".to_string(),
+                    metadata: Some(SubtitleMetadata {
+                        style: Some("Default".to_string()),
+                        ..Default::default()
+                    }),
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "0:00:05.00".to_string(),
+                    end_time: "0:00:08.00".to_string(),
+                    text: "Normal text".to_string(),
+                    metadata: Some(SubtitleMetadata {
+                        style: Some("Default".to_string()),
+                        ..Default::default()
+                    }),
+                },
+                SubtitleEntry {
+                    index: 3,
+                    start_time: "0:00:09.00".to_string(),
+                    end_time: "0:00:12.00".to_string(),
+                    text: r"{\pos(100,200)}Positioned text".to_string(),
+                    metadata: Some(SubtitleMetadata {
+                        style: Some("Title".to_string()),
+                        ..Default::default()
+                    }),
+                },
+            ],
+            headers: None,
+        }
+    }
+
+    fn create_mock_openai_response(translations: &[(&str, &str)]) -> String {
+        let lines: Vec<String> = translations
+            .iter()
+            .map(|(idx, text)| format!("{}|{}", idx, text))
+            .collect();
+        format!(
+            r#"{{"choices": [{{"message": {{"role": "assistant", "content": "{}"}}}}]}}"#,
+            lines.join("\n").replace('\n', "\\n")
+        )
+    }
+
+    #[test]
+    fn test_parse_translation_line_basic() {
+        let result = parse_translation_line("1|Hello World", NEWLINE_PLACEHOLDER);
+        assert!(result.is_some());
+        let (idx, text) = result.unwrap();
+        assert_eq!(idx, 1);
+        assert_eq!(text, "Hello World");
+    }
+
+    #[test]
+    fn test_parse_translation_line_with_newlines() {
+        let result = parse_translation_line(
+            &format!("2|Line1{}Line2", NEWLINE_PLACEHOLDER),
+            NEWLINE_PLACEHOLDER,
+        );
+        assert!(result.is_some());
+        let (idx, text) = result.unwrap();
+        assert_eq!(idx, 2);
+        assert_eq!(text, "Line1\nLine2");
+    }
+
+    #[test]
+    fn test_parse_translation_line_ignores_empty() {
+        assert!(parse_translation_line("", NEWLINE_PLACEHOLDER).is_none());
+        assert!(parse_translation_line("```json", NEWLINE_PLACEHOLDER).is_none());
+    }
+
+    #[test]
+    fn test_parse_translation_line_with_ass_newlines() {
+        let result = parse_translation_line(r"3|Line1\NLine2", NEWLINE_PLACEHOLDER);
+        assert!(result.is_some());
+        let (idx, text) = result.unwrap();
+        assert_eq!(idx, 3);
+        assert_eq!(text, "Line1\nLine2");
+    }
+
+    #[test]
+    fn test_parse_translation_line_with_real_newlines() {
+        let result = parse_translation_line("4|Line1\nLine2", NEWLINE_PLACEHOLDER);
+        assert!(result.is_some());
+        let (idx, text) = result.unwrap();
+        assert_eq!(idx, 4);
+        assert_eq!(text, "Line1\nLine2");
+    }
+
+    #[test]
+    fn test_strip_think_blocks_single() {
+        let input = "<think> some thought</think> output text";
+        let result = strip_think_blocks(input);
+        assert_eq!(result, " output text");
+    }
+
+    #[test]
+    fn test_strip_think_blocks_multiple() {
+        let input = "<think> first</think>text1<think> second</think>text2<think> third</think>";
+        let result = strip_think_blocks(input);
+        assert_eq!(result, "text1text2");
+    }
+
+    #[test]
+    fn test_strip_think_blocks_none() {
+        let input = "plain text without think blocks";
+        let result = strip_think_blocks(input);
+        assert_eq!(result, "plain text without think blocks");
+    }
+
+    #[test]
+    fn test_strip_think_blocks_nested() {
+        let input = "<think> outer<think> inner</think> outer continued</think> real content";
+        let result = strip_think_blocks(input);
+        assert_eq!(result, " outer continued real content");
+    }
+
+    #[test]
+    fn test_tags_compatible_exact_match() {
+        let original = r"{\i1}Hello{\i0}";
+        let translated = r"{\i1}Olá{\i0}";
+        assert!(LlmClient::tags_compatible(original, translated));
+    }
+
+    #[test]
+    fn test_tags_compatible_different_tags() {
+        let original = r"{\i1}Hello{\i0}";
+        let translated = r"{\b1}Olá{\b0}";
+        assert!(!LlmClient::tags_compatible(original, translated));
+    }
+
+    #[test]
+    fn test_tags_compatible_empty_both() {
+        assert!(LlmClient::tags_compatible("Hello", "Olá"));
+    }
+
+    #[test]
+    fn test_tags_compatible_empty_original() {
+        assert!(!LlmClient::tags_compatible("Hello", r"{\i1}Olá{\i0}"));
+    }
+
+    #[test]
+    fn test_tags_compatible_empty_translated() {
+        assert!(!LlmClient::tags_compatible(r"{\i1}Hello{\i0}", "Olá"));
+    }
+
+    #[test]
+    fn test_tags_compatible_case_insensitive() {
+        let original = r"{\I1}Hello{\I0}";
+        let translated = r"{\i1}Olá{\i0}";
+        assert!(LlmClient::tags_compatible(original, translated));
+    }
+
+    #[test]
+    fn test_tags_compatible_multiple_same_tags() {
+        let original = r"{\i1}{\i1}Hello{\i0}{\i0}";
+        let translated = r"{\i1}{\i1}Olá{\i0}{\i0}";
+        assert!(LlmClient::tags_compatible(original, translated));
+    }
+
+    #[test]
+    fn test_tags_compatible_mismatched_count() {
+        let original = r"{\i1}Hello{\i0}";
+        let translated = r"{\i1}{\i1}Olá{\i0}{\i0}";
+        assert!(!LlmClient::tags_compatible(original, translated));
+    }
+
+    #[test]
+    fn test_batch_translation_result_progress() {
+        let result = BatchTranslationResult {
+            translations: vec![
+                (1, "Translated 1".to_string()),
+                (2, "Translated 2".to_string()),
+            ],
+            progress: TranslationProgress {
+                total_entries: 10,
+                translated_entries: 2,
+                last_translated_index: 2,
+                is_partial: true,
+                can_continue: true,
+            },
+        };
+
+        assert_eq!(result.progress.total_entries, 10);
+        assert_eq!(result.progress.translated_entries, 2);
+        assert!(result.progress.is_partial);
+        assert!(result.progress.can_continue);
+    }
+
+    #[test]
+    fn test_translation_progress_default() {
+        let progress = TranslationProgress::default();
+        assert_eq!(progress.total_entries, 0);
+        assert_eq!(progress.translated_entries, 0);
+        assert!(!progress.is_partial);
+        assert!(!progress.can_continue);
+    }
+
+    #[test]
+    fn test_translation_settings_default() {
+        let settings = TranslationSettings::default();
+        assert_eq!(settings.batch_size, 50);
+        assert_eq!(settings.parallel_requests, 1);
+        assert!(settings.auto_continue);
+        assert!(!settings.continue_on_error);
+        assert_eq!(settings.max_retries, 3);
+    }
+
+    #[test]
+    fn test_translation_batch_report_structure() {
+        let report = TranslationBatchReport {
+            translations: vec![(1, "Test 1".to_string()), (2, "Test 2".to_string())],
+            progress: TranslationProgress {
+                total_entries: 5,
+                translated_entries: 2,
+                last_translated_index: 2,
+                is_partial: true,
+                can_continue: true,
+            },
+            error_message: None,
+        };
+
+        assert_eq!(report.translations.len(), 2);
+        assert!(report.error_message.is_none());
+        assert!(report.progress.is_partial);
+    }
+
+    #[test]
+    fn test_translation_batch_report_with_error() {
+        let report = TranslationBatchReport {
+            translations: vec![(1, "Test 1".to_string())],
+            progress: TranslationProgress {
+                total_entries: 5,
+                translated_entries: 1,
+                last_translated_index: 1,
+                is_partial: true,
+                can_continue: true,
+            },
+            error_message: Some("Batch 2 failed".to_string()),
+        };
+
+        assert!(report.error_message.is_some());
+        assert_eq!(report.error_message.unwrap(), "Batch 2 failed");
+    }
+
+    #[test]
+    fn test_translation_retry_info() {
+        let retry_info = TranslationRetryInfo {
+            attempt: 2,
+            max_retries: 3,
+            error_message: "Connection timeout".to_string(),
+            progress: TranslationProgress {
+                total_entries: 10,
+                translated_entries: 4,
+                last_translated_index: 4,
+                is_partial: true,
+                can_continue: true,
+            },
+        };
+
+        assert_eq!(retry_info.attempt, 2);
+        assert_eq!(retry_info.max_retries, 3);
+        assert!(retry_info.progress.can_continue);
+    }
+
+    #[test]
+    fn test_translation_error_info() {
+        let error_info = TranslationErrorInfo {
+            error_message: "Max retries exceeded".to_string(),
+            progress: TranslationProgress {
+                total_entries: 10,
+                translated_entries: 5,
+                last_translated_index: 5,
+                is_partial: true,
+                can_continue: false,
+            },
+        };
+
+        assert!(error_info.progress.is_partial);
+        assert!(!error_info.progress.can_continue);
+    }
+
+    #[tokio::test]
+    async fn test_translate_batch_resume_from_index() {
+        let config = create_test_config("http://localhost:8045/v1/chat/completions");
+        let client = LlmClient::new(config);
+
+        let entries = vec![
+            (1, "First".to_string()),
+            (2, "Second".to_string()),
+            (3, "Third".to_string()),
+            (4, "Fourth".to_string()),
+            (5, "Fifth".to_string()),
+        ];
+
+        let result = client.translate_batch("Translate", &entries, 3, 10).await;
+        assert!(result.is_ok());
+
+        let batch_result = result.unwrap();
+        assert_eq!(
+            batch_result.translations.first().map(|(idx, _)| *idx),
+            Some(3)
+        );
+        assert!(batch_result.translations.iter().all(|(idx, _)| *idx >= 3));
+    }
+
+    #[tokio::test]
+    async fn test_translate_batch_empty_when_start_exceeds_entries() {
+        let config = create_test_config("http://localhost:8045/v1/chat/completions");
+        let client = LlmClient::new(config);
+
+        let entries = vec![(1, "First".to_string()), (2, "Second".to_string())];
+
+        let result = client.translate_batch("Translate", &entries, 100, 10).await;
+        assert!(result.is_ok());
+
+        let batch_result = result.unwrap();
+        assert!(batch_result.translations.is_empty());
+        assert_eq!(batch_result.progress.total_entries, 2);
+        assert_eq!(batch_result.progress.translated_entries, 2);
+    }
+
+    #[tokio::test]
+    async fn test_translate_batch_respects_batch_size() {
+        let config = create_test_config("http://localhost:8045/v1/chat/completions");
+        let client = LlmClient::new(config);
+
+        let entries: Vec<(usize, String)> = (1..=20).map(|i| (i, format!("Text {}", i))).collect();
+
+        let result = client.translate_batch("Translate", &entries, 1, 5).await;
+        assert!(result.is_ok());
+
+        let batch_result = result.unwrap();
+        assert!(batch_result.translations.len() <= 5);
+    }
+
+    #[test]
+    fn test_cancel_flag_check() {
+        let flag = Arc::new(AtomicBool::new(false));
+        assert!(!is_cancelled(&Some(flag.clone())));
+
+        flag.store(true, Ordering::Relaxed);
+        assert!(is_cancelled(&Some(flag)));
+    }
+
+    #[test]
+    fn test_cancel_flag_none() {
+        assert!(!is_cancelled(&None));
+    }
+
+    #[test]
+    fn test_check_cancelled_ok() {
+        let flag = Arc::new(AtomicBool::new(false));
+        assert!(check_cancelled(&Some(flag)).is_ok());
+    }
+
+    #[test]
+    fn test_check_cancelled_err() {
+        let flag = Arc::new(AtomicBool::new(true));
+        let result = check_cancelled(&Some(flag));
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), TRANSLATION_CANCELLED_ERROR);
+    }
+
+    #[test]
+    fn test_translated_entry_event_serde() {
+        let event = TranslatedEntryEvent {
+            index: 5,
+            text: "Translated text".to_string(),
+        };
+
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: TranslatedEntryEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.index, 5);
+        assert_eq!(parsed.text, "Translated text");
+    }
+
+    #[test]
+    fn test_api_format_detection_openai() {
+        let endpoint = "http://localhost:8045/v1/chat/completions";
+        let format = detect_api_format(endpoint, &ApiFormat::Auto);
+        assert_eq!(format, ApiFormat::OpenAI);
+    }
+
+    #[test]
+    fn test_api_format_detection_anthropic_from_endpoint() {
+        let endpoint = "http://api.anthropic.com/v1/messages";
+        let format = detect_api_format(endpoint, &ApiFormat::Auto);
+        assert_eq!(format, ApiFormat::Anthropic);
+    }
+
+    #[test]
+    fn test_api_format_detection_explicit_override() {
+        let endpoint = "http://localhost:8045/v1/chat/completions";
+        let format = detect_api_format(endpoint, &ApiFormat::Anthropic);
+        assert_eq!(format, ApiFormat::Anthropic);
+    }
+
+    #[test]
+    fn test_normalize_endpoint_openai() {
+        let endpoint = "http://localhost:8045/v1";
+        let normalized = normalize_endpoint_for_format(endpoint, &ApiFormat::OpenAI);
+        assert_eq!(normalized, "http://localhost:8045/v1/chat/completions");
+    }
+
+    #[test]
+    fn test_normalize_endpoint_anthropic() {
+        let endpoint = "http://api.anthropic.com/v1";
+        let normalized = normalize_endpoint_for_format(endpoint, &ApiFormat::Anthropic);
+        assert_eq!(normalized, "http://api.anthropic.com/v1/messages");
+    }
+
+    #[test]
+    fn test_normalize_endpoint_preserves_existing() {
+        let endpoint = "http://localhost:8045/v1/chat/completions";
+        let normalized = normalize_endpoint_for_format(endpoint, &ApiFormat::OpenAI);
+        assert_eq!(normalized, endpoint);
+    }
+
+    #[test]
+    fn test_normalize_endpoint_anthropic_preserves_messages() {
+        let endpoint = "http://api.anthropic.com/v1/messages";
+        let normalized = normalize_endpoint_for_format(endpoint, &ApiFormat::Anthropic);
+        assert_eq!(normalized, endpoint);
+    }
+
+    #[test]
+    fn test_reasoning_effort_as_api_value() {
+        assert_eq!(ReasoningEffort::None.as_api_value(), Some("none"));
+        assert_eq!(ReasoningEffort::Minimal.as_api_value(), Some("minimal"));
+        assert_eq!(ReasoningEffort::Low.as_api_value(), Some("low"));
+        assert_eq!(ReasoningEffort::Medium.as_api_value(), Some("medium"));
+        assert_eq!(ReasoningEffort::High.as_api_value(), Some("high"));
+        assert_eq!(ReasoningEffort::Xhigh.as_api_value(), Some("xhigh"));
+        assert_eq!(ReasoningEffort::Default.as_api_value(), None);
+    }
+
+    #[test]
+    fn test_llm_config_default() {
+        let config = LlmConfig::default();
+        assert!(config.endpoint.contains("localhost"));
+        assert_eq!(config.api_key, "dummy");
+        assert_eq!(config.model, "gemini-2.5-pro");
+    }
+
+    #[test]
+    fn test_llm_model_serde() {
+        let model = LlmModel {
+            id: "gpt-4".to_string(),
+            object: "model".to_string(),
+            owned_by: Some("openai".to_string()),
+            name: Some("GPT-4".to_string()),
+            description: Some("Powerful model".to_string()),
+            context_length: Some(8192),
+        };
+
+        let json = serde_json::to_string(&model).unwrap();
+        let parsed: LlmModel = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.id, "gpt-4");
+        assert_eq!(parsed.context_length, Some(8192));
+    }
+
+    #[test]
+    fn test_chat_message_serde() {
+        let msg = ChatMessage {
+            role: "user".to_string(),
+            content: "Hello".to_string(),
+        };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed: ChatMessage = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.role, "user");
+        assert_eq!(parsed.content, "Hello");
     }
 }
