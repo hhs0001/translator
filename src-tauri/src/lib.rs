@@ -346,7 +346,7 @@ async fn translate_subtitle_full(
 
         // Reaplica tags se usou cleaner, senão aplica normal
         let final_translations = if let Some(ref cleaned) = cleaned_data {
-let translations_map: std::collections::HashMap<usize, String> =
+            let translations_map: std::collections::HashMap<usize, String> =
                 translations.into_iter().collect();
             reapply_all_tags(cleaned, &translations_map, &cleaner_config)
         } else {
@@ -450,7 +450,7 @@ let translations_map: std::collections::HashMap<usize, String> =
     // Reaplica tags se usou cleaner, senão aplica normal
     let final_translations = if let Some(ref cleaned) = cleaned_data {
         let translations_map: std::collections::HashMap<usize, String> =
-                translations.into_iter().collect();
+            translations.into_iter().collect();
         reapply_all_tags(cleaned, &translations_map, &cleaner_config)
     } else {
         translations
@@ -1466,7 +1466,7 @@ mod tests {
             std::fs::write(&test_file, b"fake subtitle content").unwrap();
 
             let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
-            
+
             assert!(result.is_subtitle, "Extension {} should be subtitle", ext);
             assert!(!result.is_video, "Extension {} should not be video", ext);
             assert_eq!(result.extension, *ext);
@@ -1498,10 +1498,10 @@ mod tests {
     #[test]
     fn test_file_info_case_insensitive_extension() {
         let temp_dir = std::env::temp_dir();
-        
+
         let test_file = temp_dir.join("TEST.SRT");
         std::fs::write(&test_file, b"content").unwrap();
-        
+
         let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
         assert!(result.is_subtitle);
         assert_eq!(result.extension, "srt");
@@ -1512,7 +1512,7 @@ mod tests {
     #[test]
     fn test_file_info_all_video_formats() {
         let temp_dir = std::env::temp_dir();
-        
+
         for ext in &["mkv", "mp4", "avi", "mov", "webm", "m4v", "ts"] {
             let test_file = temp_dir.join(format!("video.{}", ext));
             std::fs::write(&test_file, b"video").unwrap();
@@ -1532,7 +1532,7 @@ mod tests {
 
         let path_str = test_file.to_string_lossy().to_string();
         let result = get_file_info(path_str).unwrap();
-        
+
         assert_eq!(result.filename, "path_test.srt");
         assert!(result.path.contains("path_test.srt"));
 
@@ -1554,25 +1554,46 @@ mod tests {
 
     #[test]
     fn test_detect_subtitle_format_srt() {
-        assert_eq!(detect_subtitle_format("movie.srt".to_string()), Some("srt".to_string()));
-        assert_eq!(detect_subtitle_format("movie.SRT".to_string()), Some("srt".to_string()));
-        assert_eq!(detect_subtitle_format("/path/to/file.srt".to_string()), Some("srt".to_string()));
+        assert_eq!(
+            detect_subtitle_format("movie.srt".to_string()),
+            Some("srt".to_string())
+        );
+        assert_eq!(
+            detect_subtitle_format("movie.SRT".to_string()),
+            Some("srt".to_string())
+        );
+        assert_eq!(
+            detect_subtitle_format("/path/to/file.srt".to_string()),
+            Some("srt".to_string())
+        );
     }
 
     #[test]
     fn test_detect_subtitle_format_ass() {
-        assert_eq!(detect_subtitle_format("movie.ass".to_string()), Some("ass".to_string()));
-        assert_eq!(detect_subtitle_format("movie.ASS".to_string()), Some("ass".to_string()));
+        assert_eq!(
+            detect_subtitle_format("movie.ass".to_string()),
+            Some("ass".to_string())
+        );
+        assert_eq!(
+            detect_subtitle_format("movie.ASS".to_string()),
+            Some("ass".to_string())
+        );
     }
 
     #[test]
     fn test_detect_subtitle_format_ssa() {
-        assert_eq!(detect_subtitle_format("movie.ssa".to_string()), Some("ssa".to_string()));
+        assert_eq!(
+            detect_subtitle_format("movie.ssa".to_string()),
+            Some("ssa".to_string())
+        );
     }
 
     #[test]
     fn test_detect_subtitle_format_vtt() {
-        assert_eq!(detect_subtitle_format("movie.vtt".to_string()), Some("vtt".to_string()));
+        assert_eq!(
+            detect_subtitle_format("movie.vtt".to_string()),
+            Some("vtt".to_string())
+        );
     }
 
     #[test]
