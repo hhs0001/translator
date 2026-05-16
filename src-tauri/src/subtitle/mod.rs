@@ -174,9 +174,18 @@ mod tests {
 
     #[test]
     fn test_detect_format_with_path() {
-        assert_eq!(SubtitleFile::detect_format("/path/to/movie.srt"), Some(SubtitleFormat::Srt));
-        assert_eq!(SubtitleFile::detect_format("C:\\Users\\test\\file.ass"), Some(SubtitleFormat::Ass));
-        assert_eq!(SubtitleFile::detect_format("/home/user/Desktop/subtitles.vtt"), Some(SubtitleFormat::Vtt));
+        assert_eq!(
+            SubtitleFile::detect_format("/path/to/movie.srt"),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("C:\\Users\\test\\file.ass"),
+            Some(SubtitleFormat::Ass)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("/home/user/Desktop/subtitles.vtt"),
+            Some(SubtitleFormat::Vtt)
+        );
     }
 
     #[test]
@@ -184,9 +193,27 @@ mod tests {
         let file = SubtitleFile {
             format: SubtitleFormat::Srt,
             entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01,000".to_string(), end_time: "00:00:04,000".to_string(), text: "First text".to_string(), metadata: None },
-                SubtitleEntry { index: 2, start_time: "00:00:05,000".to_string(), end_time: "00:00:08,000".to_string(), text: "Second text".to_string(), metadata: None },
-                SubtitleEntry { index: 3, start_time: "00:00:09,000".to_string(), end_time: "00:00:12,000".to_string(), text: "Third text".to_string(), metadata: None },
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "00:00:01,000".to_string(),
+                    end_time: "00:00:04,000".to_string(),
+                    text: "First text".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "00:00:05,000".to_string(),
+                    end_time: "00:00:08,000".to_string(),
+                    text: "Second text".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 3,
+                    start_time: "00:00:09,000".to_string(),
+                    end_time: "00:00:12,000".to_string(),
+                    text: "Third text".to_string(),
+                    metadata: None,
+                },
             ],
             headers: None,
         };
@@ -203,8 +230,20 @@ mod tests {
         let mut file = SubtitleFile {
             format: SubtitleFormat::Srt,
             entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01,000".to_string(), end_time: "00:00:04,000".to_string(), text: "Original".to_string(), metadata: None },
-                SubtitleEntry { index: 2, start_time: "00:00:05,000".to_string(), end_time: "00:00:08,000".to_string(), text: "Original 2".to_string(), metadata: None },
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "00:00:01,000".to_string(),
+                    end_time: "00:00:04,000".to_string(),
+                    text: "Original".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "00:00:05,000".to_string(),
+                    end_time: "00:00:08,000".to_string(),
+                    text: "Original 2".to_string(),
+                    metadata: None,
+                },
             ],
             headers: None,
         };
@@ -225,9 +264,27 @@ mod tests {
         let mut file = SubtitleFile {
             format: SubtitleFormat::Srt,
             entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01,000".to_string(), end_time: "00:00:04,000".to_string(), text: "Original".to_string(), metadata: None },
-                SubtitleEntry { index: 2, start_time: "00:00:05,000".to_string(), end_time: "00:00:08,000".to_string(), text: "Original 2".to_string(), metadata: None },
-                SubtitleEntry { index: 3, start_time: "00:00:09,000".to_string(), end_time: "00:00:12,000".to_string(), text: "Original 3".to_string(), metadata: None },
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "00:00:01,000".to_string(),
+                    end_time: "00:00:04,000".to_string(),
+                    text: "Original".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "00:00:05,000".to_string(),
+                    end_time: "00:00:08,000".to_string(),
+                    text: "Original 2".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 3,
+                    start_time: "00:00:09,000".to_string(),
+                    end_time: "00:00:12,000".to_string(),
+                    text: "Original 3".to_string(),
+                    metadata: None,
+                },
             ],
             headers: None,
         };
