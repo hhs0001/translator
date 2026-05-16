@@ -395,6 +395,145 @@ mod tests {
                 "stream=index,codec_name,codec_type:stream_tags=language,title",
                 "-of",
                 "json",
+                "/path/to/video.mkv",
+            ],
+            Ok(CommandOutput::success_with_stdout(
+                ffprobe_output.as_bytes().to_vec(),
+            )),
+        );
+
+        with_mock_runner(Box::new(mock), || {
+            let result = list_subtitle_tracks("/path/to/video.mkv");
+            assert!(result.is_ok());
+            let tracks = result.unwrap();
+            assert_eq!(tracks.len(), 1);
+            assert_eq!(tracks[0].stream_index, 0);
+            assert_eq!(tracks[0].codec_name, "ass");
+            assert_eq!(tracks[0].language, Some("eng".to_string()));
+            assert_eq!(tracks[0].title, Some("English".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_list_subtitle_tracks_multiple_tracks() {
+        let mock = MockCommandRunner::new();
+        let ffprobe_output = r#"{
+            "streams": [
+                {
+                    "index": 1,
+                    "codec_name": "subrip",
+                    "codec_type": "subtitle",
+                    "tags": {
+                        "language": "eng"
+                    }
+                },
+                {
+                    "index": 2,
+                    "codec_name": "ass",
+                    "codec_type": "subtitle",
+                    "tags": {
+                        "language": "jpn",
+                        "title": "Japanese"
+                    }
+                },
+                {
+                    "index": 0,
+                    "codec_name": "h264",
+                    "codec_type": "video"
+                }
+            ]
+        }"#;
+        mock.add_response(
+            "ffprobe",
+            &[
+                "-v",
+                "error",
+                "-select_streams",
+                "s",
+                "-show_entries",
+                "stream=index,codec_name,codec_type:stream_tags=language,title",
+                "-of",
+                "json",
+                "/path/to/video.mkv",
+            ],
+            Ok(CommandOutput::success_with_stdout(
+                ffprobe_output.as_bytes().to_vec(),
+            )),
+        );
+
+        with_mock_runner(Box::new(mock), || {
+            let result = list_subtitle_tracks("/path/to/video.mkv");
+            assert!(result.is_ok());
+            let tracks = result.unwrap();
+            assert_eq!(tracks.len(), 2);
+            assert_eq!(tracks[0].index, 0);
+            assert_eq!(tracks[0].stream_index, 1);
+            assert_eq!(tracks[0].codec_name, "subrip");
+            assert_eq!(tracks[0].language, Some("eng".to_string()));
+            assert_eq!(tracks[1].index, 1);
+            assert_eq!(tracks[1].stream_index, 2);
+            assert_eq!(tracks[1].codec_name, "ass");
+            assert_eq!(tracks[1].language, Some("jpn".to_string()));
+        });
+    }
+
+    #[test]
+    fn test_list_subtitle_tracks_no_subtitles() {
+        let mock = MockCommandRunner::new();
+        let ffprobe_output = r#"{
+            "streams": [
+                {
+                    "index": 0,
+                    "codec_name": "h264",
+                    "codec_type": "video"
+                },
+                {
+                    "index": 1,
+                    "codec_name": "aac",
+                    "codec_type": "audio"
+                }
+            ]
+        }"#;
+        mock.add_response(
+            "ffprobe",
+            &[
+                "-v",
+                "error",
+                "-select_streams",
+                "s",
+                "-show_entries",
+                "stream=index,codec_name,codec_type:stream_tags=language,title",
+                "-of",
+                "json",
+                "/path/to/video.mkv",
+            ],
+            Ok(CommandOutput::success_with_stdout(
+                ffprobe_output.as_bytes().to_vec(),
+            )),
+        );
+
+        with_mock_runner(Box::new(mock), || {
+            let result = list_subtitle_tracks("/path/to/video.mkv");
+            assert!(result.is_ok());
+            let tracks = result.unwrap();
+            assert!(tracks.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_list_subtitle_tracks_ffprobe_failure() {
+        let mock = MockCommandRunner::new();
+        mock.add_response(
+            "ffprobe",
+            &[
+                "-v",
+                "error",
+                "-select_streams",
+                "s",
+                "-show_entries",
+                "stream=index,codec_name,codec_type:stream_tags=language,title",
+                "-of",
+                "json",
                 "/invalid/path.mkv",
             ],
             Ok(CommandOutput::failure(b"No such file".to_vec())),
