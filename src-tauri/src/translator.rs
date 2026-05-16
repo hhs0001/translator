@@ -748,7 +748,10 @@ CRITICAL FORMAT INSTRUCTIONS:
                 Err(e) => {
                     retries += 1;
                     if retries > max_retries {
-                        return Err(format!("Batch {}: Translation request failed after {} retries: {}", batch_index, max_retries, e));
+                        return Err(format!(
+                            "Batch {}: Translation request failed after {} retries: {}",
+                            batch_index, max_retries, e
+                        ));
                     }
                     check_cancelled(&cancel_flag)?;
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -761,7 +764,10 @@ CRITICAL FORMAT INSTRUCTIONS:
                 let body = response.text().await.unwrap_or_default();
                 retries += 1;
                 if retries > max_retries {
-                    return Err(format!("Batch {}: Translation API error {} after {} retries: {}", batch_index, status, max_retries, body));
+                    return Err(format!(
+                        "Batch {}: Translation API error {} after {} retries: {}",
+                        batch_index, status, max_retries, body
+                    ));
                 }
                 check_cancelled(&cancel_flag)?;
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -800,14 +806,11 @@ CRITICAL FORMAT INSTRUCTIONS:
                                         for ch in content.chars() {
                                             if ch == '\n' {
                                                 // End of a line - try to parse
-                                                let line_content =
-                                                    current_text.trim().to_string();
-                                                if let Some((idx, text)) =
-                                                    parse_translation_line(
-                                                        &line_content,
-                                                        NEWLINE_PLACEHOLDER,
-                                                    )
-                                                {
+                                                let line_content = current_text.trim().to_string();
+                                                if let Some((idx, text)) = parse_translation_line(
+                                                    &line_content,
+                                                    NEWLINE_PLACEHOLDER,
+                                                ) {
                                                     // Validate ASS tag compatibility
                                                     let should_emit = original_map
                                                         .get(&idx)
@@ -834,10 +837,7 @@ CRITICAL FORMAT INSTRUCTIONS:
                             }
                             Err(e) => {
                                 #[cfg(debug_assertions)]
-                                eprintln!(
-                                    "Failed to parse SSE chunk: {} - JSON: {}",
-                                    e, json_str
-                                );
+                                eprintln!("Failed to parse SSE chunk: {} - JSON: {}", e, json_str);
                                 let _ = e;
                             }
                         }
@@ -849,9 +849,7 @@ CRITICAL FORMAT INSTRUCTIONS:
 
             // Process last line of the batch if any
             let line_content = current_text.trim().to_string();
-            if let Some((idx, text)) =
-                parse_translation_line(&line_content, NEWLINE_PLACEHOLDER)
-            {
+            if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
                 let should_emit = original_map
                     .get(&idx)
                     .map(|orig| Self::tags_compatible(orig, &text))
@@ -919,15 +917,17 @@ CRITICAL FORMAT INSTRUCTIONS:
                     let mut on_entry_clone = on_entry.clone();
 
                     futures.push(async move {
-                        let result = self.translate_streaming_batch(
-                            system_prompt,
-                            &batch,
-                            batch_idx,
-                            max_retries,
-                            cancel_flag,
-                            original_map,
-                            &mut on_entry_clone,
-                        ).await;
+                        let result = self
+                            .translate_streaming_batch(
+                                system_prompt,
+                                &batch,
+                                batch_idx,
+                                max_retries,
+                                cancel_flag,
+                                original_map,
+                                &mut on_entry_clone,
+                            )
+                            .await;
                         (batch_idx, result)
                     });
                 }
@@ -1458,7 +1458,8 @@ mod translation_integration_tests {
             .iter()
             .map(|(idx, text)| format!("{}|{}", idx, text))
             .collect();
-        format!(r#"{{"choices": [{{"message": {{"role": "assistant", "content": "{}"}}}}]}}"#,
+        format!(
+            r#"{{"choices": [{{"message": {{"role": "assistant", "content": "{}"}}}}]}}"#,
             lines.join("\n").replace('\n', "\\n")
         )
     }
@@ -1474,7 +1475,10 @@ mod translation_integration_tests {
 
     #[test]
     fn test_parse_translation_line_with_newlines() {
-        let result = parse_translation_line(&format!("2|Line1{}Line2", NEWLINE_PLACEHOLDER), NEWLINE_PLACEHOLDER);
+        let result = parse_translation_line(
+            &format!("2|Line1{}Line2", NEWLINE_PLACEHOLDER),
+            NEWLINE_PLACEHOLDER,
+        );
         assert!(result.is_some());
         let (idx, text) = result.unwrap();
         assert_eq!(idx, 2);
@@ -1586,7 +1590,10 @@ mod translation_integration_tests {
     #[test]
     fn test_batch_translation_result_progress() {
         let result = BatchTranslationResult {
-            translations: vec![(1, "Translated 1".to_string()), (2, "Translated 2".to_string())],
+            translations: vec![
+                (1, "Translated 1".to_string()),
+                (2, "Translated 2".to_string()),
+            ],
             progress: TranslationProgress {
                 total_entries: 10,
                 translated_entries: 2,
@@ -1712,7 +1719,10 @@ mod translation_integration_tests {
         assert!(result.is_ok());
 
         let batch_result = result.unwrap();
-        assert_eq!(batch_result.translations.first().map(|(idx, _)| *idx), Some(3));
+        assert_eq!(
+            batch_result.translations.first().map(|(idx, _)| *idx),
+            Some(3)
+        );
         assert!(batch_result.translations.iter().all(|(idx, _)| *idx >= 3));
     }
 
@@ -1721,10 +1731,7 @@ mod translation_integration_tests {
         let config = create_test_config("http://localhost:8045/v1/chat/completions");
         let client = LlmClient::new(config);
 
-        let entries = vec![
-            (1, "First".to_string()),
-            (2, "Second".to_string()),
-        ];
+        let entries = vec![(1, "First".to_string()), (2, "Second".to_string())];
 
         let result = client.translate_batch("Translate", &entries, 100, 10).await;
         assert!(result.is_ok());

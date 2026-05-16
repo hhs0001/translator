@@ -140,7 +140,10 @@ fn categorize_tags(
             if pos == 0 {
                 opening.push(format!("{{{}}}", tag_content));
             } else {
-                inline.entry(pos).or_default().push(format!("{{{}}}", tag_content));
+                inline
+                    .entry(pos)
+                    .or_default()
+                    .push(format!("{{{}}}", tag_content));
             }
         }
     }
@@ -356,9 +359,12 @@ pub fn reapply_tags(
     if !result.contains('{') && original_mapping.original_text.contains('{') {
         // Extrai só as tags de formatação básica do original
         let (_original_clean, tags) = extract_tags(&original_mapping.original_text);
-        let basic_tags: Vec<_> = tags.into_iter()
+        let basic_tags: Vec<_> = tags
+            .into_iter()
             .filter(|(_, tag)| {
-                BASIC_FORMATTING_TAGS.iter().any(|basic| tag.starts_with(basic))
+                BASIC_FORMATTING_TAGS
+                    .iter()
+                    .any(|basic| tag.starts_with(basic))
             })
             .collect();
 
@@ -454,9 +460,15 @@ pub fn analyze_ass_clutter(entries: &[(String, Option<String>)]) -> AssClutterAn
             }
         }
 
-        if has_effects { lines_with_effects += 1; }
-        if has_karaoke { lines_with_karaoke += 1; }
-        if has_positioning { lines_with_positioning += 1; }
+        if has_effects {
+            lines_with_effects += 1;
+        }
+        if has_karaoke {
+            lines_with_karaoke += 1;
+        }
+        if has_positioning {
+            lines_with_positioning += 1;
+        }
     }
 
     AssClutterAnalysis {
@@ -545,12 +557,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
 
         assert_eq!(mapping.clean_text, "Hello World");
         assert!(mapping.opening_tags.iter().any(|t| t.contains("i1")));
@@ -585,12 +592,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            r"{\pos(640,360)}Hello World",
-            None,
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation(r"{\pos(640,360)}Hello World", None, 1, &config);
 
         assert_eq!(mapping.clean_text, "Hello World");
         assert!(!mapping.opening_tags.is_empty());
@@ -604,12 +606,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
 
         assert_eq!(mapping.clean_text, r"{\i1}Hello World{\i0}");
         assert!(mapping.opening_tags.is_empty());
@@ -623,12 +620,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
 
         let result = reapply_tags("Olá Mundo", &mapping, &config);
         assert!(result.contains("{\\i1}"));
@@ -643,12 +635,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World",
-            None,
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation(r"{\i1}Hello World", None, 1, &config);
 
         let result = reapply_tags("Olá Mundo", &mapping, &config);
         assert!(result.contains("Olá Mundo"));
@@ -662,12 +649,8 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            Some("Title"),
-            1,
-            &config,
-        );
+        let mapping =
+            clean_text_for_translation(r"{\i1}Hello World{\i0}", Some("Title"), 1, &config);
 
         let original = r"{\i1}Hello World{\i0}";
         let result = reapply_tags("Ignored", &mapping, &config);
@@ -682,12 +665,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            "Some text",
-            Some("Title1"),
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation("Some text", Some("Title1"), 1, &config);
 
         assert!(mapping.should_skip_translation);
     }
@@ -700,12 +678,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            "Some text",
-            Some("title1"),
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation("Some text", Some("title1"), 1, &config);
 
         assert!(mapping.should_skip_translation);
     }
@@ -718,12 +691,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            "Some text",
-            Some("Commentator"),
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation("Some text", Some("Commentator"), 1, &config);
 
         assert!(mapping.should_skip_translation);
     }
@@ -764,16 +732,20 @@ mod tests {
         };
 
         let entries = vec![
-            (1, r"{\i1}Hello{\i0}".to_string(), Some("Default".to_string())),
+            (
+                1,
+                r"{\i1}Hello{\i0}".to_string(),
+                Some("Default".to_string()),
+            ),
             (2, "Plain text".to_string(), None),
         ];
 
         let cleaned = clean_subtitle_entries(&entries, &config);
 
-        let translations: HashMap<usize, String> = [
-            (1, "Olá".to_string()),
-            (2, "Texto simples".to_string()),
-        ].into_iter().collect();
+        let translations: HashMap<usize, String> =
+            [(1, "Olá".to_string()), (2, "Texto simples".to_string())]
+                .into_iter()
+                .collect();
 
         let results = reapply_all_tags(&cleaned, &translations, &config);
 
@@ -797,9 +769,7 @@ mod tests {
 
         let cleaned = clean_subtitle_entries(&entries, &config);
 
-        let translations: HashMap<usize, String> = [
-            (1, "Olá".to_string()),
-        ].into_iter().collect();
+        let translations: HashMap<usize, String> = [(1, "Olá".to_string())].into_iter().collect();
 
         let results = reapply_all_tags(&cleaned, &translations, &config);
 
@@ -882,7 +852,10 @@ mod tests {
     #[test]
     fn test_analyze_ass_clutter() {
         let entries = vec![
-            (r"{\pos(100,200)}Hello".to_string(), Some("Default".to_string())),
+            (
+                r"{\pos(100,200)}Hello".to_string(),
+                Some("Default".to_string()),
+            ),
             (r"{\blur1}World".to_string(), Some("Effect".to_string())),
             (r"{\k100}Karaoke".to_string(), Some("Karaoke".to_string())),
             ("Normal text".to_string(), None),
@@ -906,10 +879,7 @@ mod tests {
 
     #[test]
     fn test_categorize_tags_opening_and_closing() {
-        let tags = vec![
-            (0, "i1".to_string()),
-            (6, "i0".to_string()),
-        ];
+        let tags = vec![(0, "i1".to_string()), (6, "i0".to_string())];
 
         let (opening, closing, inline) = categorize_tags(tags);
 
@@ -920,10 +890,7 @@ mod tests {
 
     #[test]
     fn test_categorize_tags_inline() {
-        let tags = vec![
-            (0, "i1".to_string()),
-            (6, "b1".to_string()),
-        ];
+        let tags = vec![(0, "i1".to_string()), (6, "b1".to_string())];
 
         let (opening, closing, inline) = categorize_tags(tags);
 
@@ -934,9 +901,7 @@ mod tests {
 
     #[test]
     fn test_categorize_tags_reset_tag() {
-        let tags = vec![
-            (0, "r".to_string()),
-        ];
+        let tags = vec![(0, "r".to_string())];
 
         let (opening, closing, inline) = categorize_tags(tags);
 
@@ -946,9 +911,7 @@ mod tests {
 
     #[test]
     fn test_categorize_tags_explicit_close() {
-        let tags = vec![
-            (0, "/i".to_string()),
-        ];
+        let tags = vec![(0, "/i".to_string())];
 
         let (opening, closing, inline) = categorize_tags(tags);
 
@@ -958,10 +921,7 @@ mod tests {
 
     #[test]
     fn test_filter_tags_preserve_basic() {
-        let tags = vec![
-            (0, "i1".to_string()),
-            (0, "pos(100,100)".to_string()),
-        ];
+        let tags = vec![(0, "i1".to_string()), (0, "pos(100,100)".to_string())];
 
         let config = TextCleanerConfig {
             enabled: true,
@@ -978,9 +938,7 @@ mod tests {
 
     #[test]
     fn test_filter_tags_custom_remove() {
-        let tags = vec![
-            (0, "\\an8".to_string()),
-        ];
+        let tags = vec![(0, "\\an8".to_string())];
 
         let config = TextCleanerConfig {
             enabled: true,
@@ -1022,12 +980,7 @@ mod tests {
             ..Default::default()
         };
 
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
 
         let result = reapply_tags("Translated", &mapping, &config);
 
