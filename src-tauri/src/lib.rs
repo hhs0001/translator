@@ -541,8 +541,6 @@ Examples:
         }
         output
     }
-        output
-    }
 
     // Tenta extrair JSON da resposta
     let response = response.trim();
