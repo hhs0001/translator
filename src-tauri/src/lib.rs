@@ -528,7 +528,7 @@ Examples:
 
     let response = client.translate(&prompt, "").await?;
 
-#[allow(clippy::while_let_loop)]
+    #[allow(clippy::while_let_loop)]
     fn strip_think_blocks(input: &str) -> String {
         let mut output = input.to_string();
         while let Some(start) = output.find("<think>") {
