@@ -464,7 +464,6 @@ pub fn analyze_ass_clutter(entries: &[(String, Option<String>)]) -> AssClutterAn
             lines_with_positioning += 1;
         }
     }
-    }
     
     AssClutterAnalysis {
         total_lines,
