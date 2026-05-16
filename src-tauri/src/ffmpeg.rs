@@ -21,7 +21,7 @@ pub struct CommandOutput {
 impl CommandOutput {
     pub fn success() -> Self {
         CommandOutput {
-            status: std::process::ExitStatus::from_raw(0),
+            status: std::process::ExitStatus::from(0),
             stdout: Vec::new(),
             stderr: Vec::new(),
         }
@@ -29,7 +29,7 @@ impl CommandOutput {
 
     pub fn success_with_stdout(stdout: Vec<u8>) -> Self {
         CommandOutput {
-            status: std::process::ExitStatus::from_raw(0),
+            status: std::process::ExitStatus::from(0),
             stdout,
             stderr: Vec::new(),
         }
@@ -37,7 +37,7 @@ impl CommandOutput {
 
     pub fn failure(stderr: Vec<u8>) -> Self {
         CommandOutput {
-            status: std::process::ExitStatus::from_raw(1),
+            status: std::process::ExitStatus::from(1),
             stdout: Vec::new(),
             stderr,
         }
@@ -235,12 +235,14 @@ pub fn mux_subtitle_track(
 
     if let Some(lang) = language {
         args.push("-metadata:s:s:0");
-        args.push(&format!("language={}", lang));
+        let lang_arg = format!("language={}", lang);
+        args.push(&lang_arg);
     }
 
     if let Some(t) = title {
         args.push("-metadata:s:s:0");
-        args.push(&format!("title={}", t));
+        let title_arg = format!("title={}", t);
+        args.push(&title_arg);
     }
 
     args.push(output_path);
