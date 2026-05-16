@@ -135,19 +135,19 @@ export function stripVttTags(text: string): string {
   let cleaned = text;
 
   // Remove voice tags: <v speaker> and </v>
-  cleaned = cleaned.replace(/<v[^>]*>/g, '');
-  cleaned = cleaned.replace(/<\/v>/g, '');
+  cleaned = cleaned.replace(/<v[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<\/v>/gi, '');
 
   // Remove class tags: <c.class> and </c>
-  cleaned = cleaned.replace(/<c[^>]*>/g, '');
-  cleaned = cleaned.replace(/<\/c>/g, '');
+  cleaned = cleaned.replace(/<c[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<\/c>/gi, '');
 
   // Remove basic formatting: <i>, </i>, <b>, </b>, <u>, </u>
-  cleaned = cleaned.replace(/<\/?[ibu]>/g, '');
+  cleaned = cleaned.replace(/<\/?[ibu]>/gi, '');
 
   // Remove ruby/rt tags: <ruby>, </ruby>, <rt>, </rt>
-  cleaned = cleaned.replace(/<\/?ruby>/g, '');
-  cleaned = cleaned.replace(/<\/?rt>/g, '');
+  cleaned = cleaned.replace(/<\/?ruby>/gi, '');
+  cleaned = cleaned.replace(/<\/?rt>/gi, '');
 
   // Remove cue settings (align:start, position:50%, etc)
   cleaned = cleaned.replace(/\b(align|position|vertical|region):[^\s]+/g, '');
