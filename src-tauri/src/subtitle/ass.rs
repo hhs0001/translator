@@ -30,25 +30,17 @@ pub fn parse(content: &str) -> Result<SubtitleFile, String> {
 
         // Processa linha baseado na seção atual
         match current_section.as_str() {
-            "script info" => {
-                if !line.is_empty() {
-                    headers.script_info.push(line.to_string());
-                }
+            "script info" if !line.is_empty() => {
+                headers.script_info.push(line.to_string());
             }
-            "v4+ styles" | "v4 styles" | "v4 styles+" => {
-                if !line.is_empty() {
-                    headers.styles.push(line.to_string());
-                }
+            "v4+ styles" | "v4 styles" | "v4 styles+" if !line.is_empty() => {
+                headers.styles.push(line.to_string());
             }
-            "fonts" => {
-                if !line.is_empty() {
-                    headers.fonts.push(line.to_string());
-                }
+            "fonts" if !line.is_empty() => {
+                headers.fonts.push(line.to_string());
             }
-            "graphics" => {
-                if !line.is_empty() {
-                    headers.graphics.push(line.to_string());
-                }
+            "graphics" if !line.is_empty() => {
+                headers.graphics.push(line.to_string());
             }
             "events" => {
                 // Captura o formato dos diálogos

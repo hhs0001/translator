@@ -156,7 +156,7 @@ fn filter_tags(tags: Vec<(usize, String)>, config: &TextCleanerConfig) -> Vec<(u
     let mut result = Vec::new();
 
     for (pos, tag_content) in tags {
-        let parts: Vec<&str> = tag_content.split(|c| c == '\\' || c == '(').collect();
+        let parts: Vec<&str> = tag_content.split(['\\', '(']).collect();
 
         let mut should_keep = false;
         let mut _is_visual_effect = false;
