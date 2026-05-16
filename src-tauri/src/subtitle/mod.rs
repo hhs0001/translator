@@ -110,27 +110,54 @@ mod tests {
 
     #[test]
     fn test_detect_format_srt() {
-        assert_eq!(SubtitleFile::detect_format("movie.srt"), Some(SubtitleFormat::Srt));
-        assert_eq!(SubtitleFile::detect_format("subtitles.SRT"), Some(SubtitleFormat::Srt));
-        assert_eq!(SubtitleFile::detect_format("video.srt"), Some(SubtitleFormat::Srt));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.srt"),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("subtitles.SRT"),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("video.srt"),
+            Some(SubtitleFormat::Srt)
+        );
     }
 
     #[test]
     fn test_detect_format_ass() {
-        assert_eq!(SubtitleFile::detect_format("movie.ass"), Some(SubtitleFormat::Ass));
-        assert_eq!(SubtitleFile::detect_format("subtitles.ASS"), Some(SubtitleFormat::Ass));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.ass"),
+            Some(SubtitleFormat::Ass)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("subtitles.ASS"),
+            Some(SubtitleFormat::Ass)
+        );
     }
 
     #[test]
     fn test_detect_format_ssa() {
-        assert_eq!(SubtitleFile::detect_format("movie.ssa"), Some(SubtitleFormat::Ssa));
-        assert_eq!(SubtitleFile::detect_format("sub.SSA"), Some(SubtitleFormat::Ssa));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.ssa"),
+            Some(SubtitleFormat::Ssa)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("sub.SSA"),
+            Some(SubtitleFormat::Ssa)
+        );
     }
 
     #[test]
     fn test_detect_format_vtt() {
-        assert_eq!(SubtitleFile::detect_format("movie.vtt"), Some(SubtitleFormat::Vtt));
-        assert_eq!(SubtitleFile::detect_format("subs.VTT"), Some(SubtitleFormat::Vtt));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.vtt"),
+            Some(SubtitleFormat::Vtt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("subs.VTT"),
+            Some(SubtitleFormat::Vtt)
+        );
     }
 
     #[test]
@@ -138,7 +165,10 @@ mod tests {
         assert_eq!(SubtitleFile::detect_format("movie.txt"), None);
         assert_eq!(SubtitleFile::detect_format("movie.mp4"), None);
         assert_eq!(SubtitleFile::detect_format("movie"), None);
-        assert_eq!(SubtitleFile::detect_format(".srt"), Some(SubtitleFormat::Srt));
+        assert_eq!(
+            SubtitleFile::detect_format(".srt"),
+            Some(SubtitleFormat::Srt)
+        );
         assert_eq!(SubtitleFile::detect_format("noextension"), None);
     }
 

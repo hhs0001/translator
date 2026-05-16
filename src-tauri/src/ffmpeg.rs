@@ -116,7 +116,20 @@ struct FfprobeTags {
 
 /// Lista faixas de legenda em um arquivo de vídeo
 pub fn list_subtitle_tracks(video_path: &str) -> Result<Vec<SubtitleTrack>, String> {
-    let output = run_command("ffprobe", &["-v", "error", "-select_streams", "s", "-show_entries", "stream=index,codec_name,codec_type:stream_tags=language,title", "-of", "json", video_path])?;
+    let output = run_command(
+        "ffprobe",
+        &[
+            "-v",
+            "error",
+            "-select_streams",
+            "s",
+            "-show_entries",
+            "stream=index,codec_name,codec_type:stream_tags=language,title",
+            "-of",
+            "json",
+            video_path,
+        ],
+    )?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -165,7 +178,16 @@ pub fn extract_subtitle_track(
         _ => "copy",
     };
 
-    let args = &["-y", "-i", video_path, "-map", &format!("0:s:{}", track_index), "-c:s", codec, output_path];
+    let args = &[
+        "-y",
+        "-i",
+        video_path,
+        "-map",
+        &format!("0:s:{}", track_index),
+        "-c:s",
+        codec,
+        output_path,
+    ];
 
     let output = run_command("ffmpeg", args)?;
 
