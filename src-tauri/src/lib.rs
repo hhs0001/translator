@@ -1235,6 +1235,310 @@ mod tests {
         assert!(handle_a.is_cancelled());
         assert!(handle_b.is_cancelled());
     }
+
+    #[test]
+    fn test_settings_default() {
+        let settings = AppSettings::default();
+        assert_eq!(settings.base_url, default_base_url());
+        assert_eq!(settings.batch_size, default_batch_size());
+        assert_eq!(settings.parallel_requests, default_parallel_requests());
+        assert_eq!(settings.auto_continue, default_auto_continue());
+        assert_eq!(settings.continue_on_error, default_continue_on_error());
+        assert_eq!(settings.max_retries, default_max_retries());
+        assert_eq!(settings.concurrency, default_concurrency());
+        assert_eq!(settings.output_mode, default_output_mode());
+        assert_eq!(settings.mux_language, default_mux_language());
+        assert_eq!(settings.mux_title, default_mux_title());
+        assert_eq!(settings.language, default_language());
+        assert_eq!(settings.streaming, false);
+        assert_eq!(settings.text_cleaner_enabled, false);
+    }
+
+    #[test]
+    fn test_settings_serde_roundtrip() {
+        let settings = AppSettings {
+            base_url: "http://custom:8080/v1".to_string(),
+            api_key: "secret-key".to_string(),
+            api_format: ApiFormat::OpenAi,
+            headers: vec![HeaderItem {
+                id: "1".to_string(),
+                key: "X-Custom-Header".to_string(),
+                value: "custom-value".to_string(),
+            }],
+            model: "gpt-4".to_string(),
+            custom_model: "custom-model".to_string(),
+            language_detection_model: "gpt-3.5".to_string(),
+            prompt: "Translate to {target}".to_string(),
+            selected_template_id: Some("template-1".to_string()),
+            batch_size: 100,
+            parallel_requests: 5,
+            auto_continue: false,
+            continue_on_error: false,
+            max_retries: 10,
+            concurrency: 3,
+            streaming: true,
+            reasoning_effort: translator::ReasoningEffort::Low,
+            anthropic_thinking_enabled: true,
+            anthropic_thinking_budget_tokens: 2048,
+            output_mode: "mux".to_string(),
+            mux_language: "eng".to_string(),
+            mux_title: "English".to_string(),
+            separate_output_dir: "/output".to_string(),
+            cleanup_extracted_subtitles: true,
+            cleanup_mux_artifacts: true,
+            language: "pt".to_string(),
+            text_cleaner_enabled: true,
+            text_cleaner_preserve_basic_formatting: false,
+            text_cleaner_tags_to_remove: vec!["{\\an*}".to_string()],
+            text_cleaner_ignored_styles: vec!["draw".to_string(), "comment".to_string()],
+        };
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let restored: AppSettings = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.base_url, settings.base_url);
+        assert_eq!(restored.api_key, settings.api_key);
+        assert_eq!(restored.api_format, settings.api_format);
+        assert_eq!(restored.headers.len(), settings.headers.len());
+        assert_eq!(restored.model, settings.model);
+        assert_eq!(restored.custom_model, settings.custom_model);
+        assert_eq!(restored.batch_size, settings.batch_size);
+        assert_eq!(restored.parallel_requests, settings.parallel_requests);
+        assert_eq!(restored.auto_continue, settings.auto_continue);
+        assert_eq!(restored.streaming, settings.streaming);
+        assert_eq!(restored.output_mode, settings.output_mode);
+        assert_eq!(restored.mux_language, settings.mux_language);
+        assert_eq!(restored.text_cleaner_enabled, settings.text_cleaner_enabled);
+        assert_eq!(restored.text_cleaner_ignored_styles, settings.text_cleaner_ignored_styles);
+    }
+
+    #[test]
+    fn test_settings_partial_deserialization() {
+        let json = r#"{"base_url":"http://test:1234","batch_size":50}"#;
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.base_url, "http://test:1234");
+        assert_eq!(settings.batch_size, 50);
+        assert_eq!(settings.api_key, "");
+        assert_eq!(settings.model, "");
+    }
+
+    #[test]
+    fn test_settings_all_defaults_serialization() {
+        let settings = AppSettings::default();
+        let json = serde_json::to_string(&settings).unwrap();
+        let restored: AppSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.base_url, settings.base_url);
+        assert_eq!(restored.batch_size, settings.batch_size);
+        assert_eq!(restored.language, settings.language);
+    }
+
+    #[test]
+    fn test_prompt_template_serde() {
+        let template = PromptTemplate {
+            id: "test-id".to_string(),
+            name: "Test Template".to_string(),
+            content: "Translate this: {text}".to_string(),
+            created_at: 1000000,
+            updated_at: 2000000,
+        };
+
+        let json = serde_json::to_string(&template).unwrap();
+        let restored: PromptTemplate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.id, template.id);
+        assert_eq!(restored.name, template.name);
+        assert_eq!(restored.content, template.content);
+        assert_eq!(restored.created_at, template.created_at);
+        assert_eq!(restored.updated_at, template.updated_at);
+    }
+
+    #[test]
+    fn test_templates_data_serde() {
+        let templates = vec![
+            PromptTemplate {
+                id: "1".to_string(),
+                name: "Template 1".to_string(),
+                content: "Content 1".to_string(),
+                created_at: 1000,
+                updated_at: 1000,
+            },
+            PromptTemplate {
+                id: "2".to_string(),
+                name: "Template 2".to_string(),
+                content: "Content 2".to_string(),
+                created_at: 2000,
+                updated_at: 2000,
+            },
+        ];
+
+        let data = TemplatesData { templates };
+        let json = serde_json::to_string(&data).unwrap();
+        let restored: TemplatesData = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.templates.len(), 2);
+        assert_eq!(restored.templates[0].name, "Template 1");
+        assert_eq!(restored.templates[1].name, "Template 2");
+    }
+
+    #[test]
+    fn test_default_functions() {
+        assert_eq!(default_base_url(), "http://localhost:8045/v1");
+        assert_eq!(default_batch_size(), 50);
+        assert_eq!(default_parallel_requests(), 1);
+        assert_eq!(default_auto_continue(), true);
+        assert_eq!(default_continue_on_error(), true);
+        assert_eq!(default_max_retries(), 3);
+        assert_eq!(default_concurrency(), 1);
+        assert_eq!(default_anthropic_thinking_budget_tokens(), 1024);
+        assert_eq!(default_output_mode(), "separate");
+        assert_eq!(default_mux_language(), "por");
+        assert_eq!(default_mux_title(), "Portuguese");
+        assert_eq!(default_language(), "en");
+        assert_eq!(default_text_cleaner_preserve_basic(), true);
+        assert_eq!(default_text_cleaner_ignored_styles(), vec!["draw".to_string()]);
+    }
+
+    #[test]
+    fn test_file_info_video_extensions() {
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_video.mp4");
+        std::fs::write(&test_file, b"fake video content").unwrap();
+
+        let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
+        
+        assert!(result.is_video);
+        assert!(!result.is_subtitle);
+        assert_eq!(result.extension, "mp4");
+        assert_eq!(result.filename, "test_video.mp4");
+        assert!(result.size > 0);
+
+        std::fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_file_info_subtitle_extensions() {
+        let temp_dir = std::env::temp_dir();
+        
+        for ext in &["srt", "ass", "ssa", "vtt"] {
+            let test_file = temp_dir.join(format!("test_subtitle.{}", ext));
+            std::fs::write(&test_file, b"fake subtitle content").unwrap();
+
+            let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
+            
+            assert!(result.is_subtitle, "Extension {} should be subtitle", ext);
+            assert!(!result.is_video, "Extension {} should not be video", ext);
+            assert_eq!(result.extension, *ext);
+
+            std::fs::remove_file(&test_file).ok();
+        }
+    }
+
+    #[test]
+    fn test_file_info_nonexistent() {
+        let result = get_file_info("/nonexistent/path/to/file.txt".to_string());
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "File does not exist");
+    }
+
+    #[test]
+    fn test_file_info_size() {
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_size.txt");
+        let content = b"test content with known size";
+        std::fs::write(&test_file, content).unwrap();
+
+        let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
+        assert_eq!(result.size, content.len() as u64);
+
+        std::fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_file_info_case_insensitive_extension() {
+        let temp_dir = std::env::temp_dir();
+        
+        let test_file = temp_dir.join("TEST.SRT");
+        std::fs::write(&test_file, b"content").unwrap();
+        
+        let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
+        assert!(result.is_subtitle);
+        assert_eq!(result.extension, "srt");
+
+        std::fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_file_info_all_video_formats() {
+        let temp_dir = std::env::temp_dir();
+        
+        for ext in &["mkv", "mp4", "avi", "mov", "webm", "m4v", "ts"] {
+            let test_file = temp_dir.join(format!("video.{}", ext));
+            std::fs::write(&test_file, b"video").unwrap();
+
+            let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
+            assert!(result.is_video, "Extension {} should be video", ext);
+
+            std::fs::remove_file(&test_file).ok();
+        }
+    }
+
+    #[test]
+    fn test_file_info_path_handling() {
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("path_test.srt");
+        std::fs::write(&test_file, b"content").unwrap();
+
+        let path_str = test_file.to_string_lossy().to_string();
+        let result = get_file_info(path_str).unwrap();
+        
+        assert_eq!(result.filename, "path_test.srt");
+        assert!(result.path.contains("path_test.srt"));
+
+        std::fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_file_info_empty_file() {
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("empty.srt");
+        std::fs::write(&test_file, b"").unwrap();
+
+        let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
+        assert_eq!(result.size, 0);
+        assert!(result.is_subtitle);
+
+        std::fs::remove_file(&test_file).ok();
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_srt() {
+        assert_eq!(detect_subtitle_format("movie.srt".to_string()), Some("srt".to_string()));
+        assert_eq!(detect_subtitle_format("movie.SRT".to_string()), Some("srt".to_string()));
+        assert_eq!(detect_subtitle_format("/path/to/file.srt".to_string()), Some("srt".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_ass() {
+        assert_eq!(detect_subtitle_format("movie.ass".to_string()), Some("ass".to_string()));
+        assert_eq!(detect_subtitle_format("movie.ASS".to_string()), Some("ass".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_ssa() {
+        assert_eq!(detect_subtitle_format("movie.ssa".to_string()), Some("ssa".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_vtt() {
+        assert_eq!(detect_subtitle_format("movie.vtt".to_string()), Some("vtt".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_unknown() {
+        assert_eq!(detect_subtitle_format("movie.txt".to_string()), None);
+        assert_eq!(detect_subtitle_format("movie.mp4".to_string()), None);
+        assert_eq!(detect_subtitle_format("movie".to_string()), None);
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
