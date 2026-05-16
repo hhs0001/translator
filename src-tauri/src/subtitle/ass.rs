@@ -595,4 +595,166 @@ Dialogue: 0,0:00:04.00,0:00:07.00,Default,Jane,0000,0000,0000,,Speech by Jane
         assert_eq!(result.entries[0].metadata.as_ref().unwrap().name.as_ref().unwrap(), "John");
         assert_eq!(result.entries[1].metadata.as_ref().unwrap().name.as_ref().unwrap(), "Jane");
     }
+
+    #[test]
+    fn test_parse_ass_empty_style_field() {
+        let content = r#"[Script Info]
+Title: Empty Style Test
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, Alignment
+Style: Default,Arial,20,2
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,,0000,0000,0000,,No style specified
+"#;
+
+        let result = parse(content).unwrap();
+        assert_eq!(result.entries.len(), 1);
+        let meta = result.entries[0].metadata.as_ref().unwrap();
+        assert!(meta.style.is_none());
+    }
+
+    #[test]
+    fn test_parse_ass_no_format_line() {
+        let content = r#"[Script Info]
+Title: Test
+
+[Events]
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0000,0000,0000,,Should this be parsed?
+"#;
+
+        let result = parse(content);
+        assert!(result.is_err() || result.entries.is_empty());
+    }
+
+    #[test]
+    fn test_parse_ass_missing_required_sections() {
+        let content = r#"[Script Info]
+Title: Incomplete File
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0000,0000,0000,,Entry without styles section
+"#;
+
+        let result = parse(content).unwrap();
+        assert_eq!(result.entries.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_ass_multiline_text_with_newlines() {
+        let content = r#"[Script Info]
+Title: Multiline Test
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, Alignment
+Style: Default,Arial,20,2
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0000,0000,0000,,Line1\NLine2\NLine3
+"#;
+
+        let result = parse(content).unwrap();
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].text, "Line1\\NLine2\\NLine3");
+    }
+
+    #[test]
+    fn test_parse_ass_various_alignment_values() {
+        let content = r#"[Script Info]
+Title: Alignment Test
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, Alignment
+Style: Default,Arial,20,2
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0000,0000,0000,,Align 2
+Dialogue: 1,0:00:02.00,0:00:03.00,Default,,0000,0000,0000,,Layer 1
+Dialogue: 2,0:00:03.00,0:00:04.00,Default,,0000,0000,0000,,Layer 2
+"#;
+
+        let result = parse(content).unwrap();
+        assert_eq!(result.entries.len(), 3);
+        assert_eq!(result.entries[0].metadata.as_ref().unwrap().layer, Some(0));
+        assert_eq!(result.entries[1].metadata.as_ref().unwrap().layer, Some(1));
+        assert_eq!(result.entries[2].metadata.as_ref().unwrap().layer, Some(2));
+    }
+
+    #[test]
+    fn test_parse_ass_zero_margins() {
+        let content = r#"[Script Info]
+Title: Zero Margins Test
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, Alignment
+Style: Default,Arial,20,2
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0000,0000,0000,,Zero margins
+"#;
+
+        let result = parse(content).unwrap();
+        assert_eq!(result.entries.len(), 1);
+        let meta = result.entries[0].metadata.as_ref().unwrap();
+        assert_eq!(meta.margin_l, Some(0));
+        assert_eq!(meta.margin_r, Some(0));
+        assert_eq!(meta.margin_v, Some(0));
+    }
+
+    #[test]
+    fn test_serialize_ass_with_empty_headers() {
+        let file = SubtitleFile {
+            format: SubtitleFormat::Ass,
+            entries: vec![SubtitleEntry {
+                index: 1,
+                start_time: "0:00:01.00".to_string(),
+                end_time: "0:00:04.00".to_string(),
+                text: "Test".to_string(),
+                metadata: None,
+            }],
+            headers: None,
+        };
+
+        let output = serialize(&file);
+        assert!(output.contains("[Events]"));
+        assert!(output.contains("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"));
+        assert!(output.contains("Dialogue:"));
+    }
+
+    #[test]
+    fn test_roundtrip_preserves_metadata() {
+        let content = r#"[Script Info]
+Title: Metadata Test
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, Alignment
+Style: Default,Arial,20,2
+Style: Custom,Times,24,5
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:04.00,Custom,Jane,0100,0200,0300,,Custom styled entry
+"#;
+
+        let parsed = parse(content).unwrap();
+        let serialized = serialize(&parsed);
+        let reparsed = parse(&serialized).unwrap();
+
+        assert_eq!(parsed.entries.len(), reparsed.entries.len());
+        
+        let original_meta = parsed.entries[0].metadata.as_ref().unwrap();
+        let reparsed_meta = reparsed.entries[0].metadata.as_ref().unwrap();
+        
+        assert_eq!(original_meta.style, reparsed_meta.style);
+        assert_eq!(original_meta.name, reparsed_meta.name);
+        assert_eq!(original_meta.margin_l, reparsed_meta.margin_l);
+        assert_eq!(original_meta.margin_r, reparsed_meta.margin_r);
+        assert_eq!(original_meta.margin_v, reparsed_meta.margin_v);
+    }
 }

@@ -1509,6 +1509,36 @@ mod tests {
 
         std::fs::remove_file(&test_file).ok();
     }
+
+    #[test]
+    fn test_detect_subtitle_format_srt() {
+        assert_eq!(detect_subtitle_format("movie.srt".to_string()), Some("srt".to_string()));
+        assert_eq!(detect_subtitle_format("movie.SRT".to_string()), Some("srt".to_string()));
+        assert_eq!(detect_subtitle_format("/path/to/file.srt".to_string()), Some("srt".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_ass() {
+        assert_eq!(detect_subtitle_format("movie.ass".to_string()), Some("ass".to_string()));
+        assert_eq!(detect_subtitle_format("movie.ASS".to_string()), Some("ass".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_ssa() {
+        assert_eq!(detect_subtitle_format("movie.ssa".to_string()), Some("ssa".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_vtt() {
+        assert_eq!(detect_subtitle_format("movie.vtt".to_string()), Some("vtt".to_string()));
+    }
+
+    #[test]
+    fn test_detect_subtitle_format_unknown() {
+        assert_eq!(detect_subtitle_format("movie.txt".to_string()), None);
+        assert_eq!(detect_subtitle_format("movie.mp4".to_string()), None);
+        assert_eq!(detect_subtitle_format("movie".to_string()), None);
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

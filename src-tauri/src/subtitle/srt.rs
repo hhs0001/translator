@@ -298,4 +298,92 @@ This should be skipped
         let result = parse(content);
         assert!(result.is_err() || result.unwrap().entries.is_empty());
     }
+
+    #[test]
+    fn test_parse_no_timestamp_line() {
+        let content = r#"1
+This is not a timestamp line
+Some text
+"#;
+
+        let result = parse(content);
+        assert!(result.is_err() || result.unwrap().entries.is_empty());
+    }
+
+    #[test]
+    fn test_parse_empty_content() {
+        let result = parse("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_only_whitespace() {
+        let result = parse("   \n\n   \n\n   ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_serialize_empty_text() {
+        let file = SubtitleFile {
+            format: SubtitleFormat::Srt,
+            entries: vec![SubtitleEntry {
+                index: 1,
+                start_time: "00:00:01,000".to_string(),
+                end_time: "00:00:04,000".to_string(),
+                text: "".to_string(),
+                metadata: None,
+            }],
+            headers: None,
+        };
+
+        let output = serialize(&file);
+        assert!(output.contains("1\n00:00:01,000 --> 00:00:04,000\n\n\n"));
+    }
+
+    #[test]
+    fn test_serialize_preserves_timestamp_format() {
+        let file = SubtitleFile {
+            format: SubtitleFormat::Srt,
+            entries: vec![SubtitleEntry {
+                index: 42,
+                start_time: "01:23:45,678".to_string(),
+                end_time: "01:24:56,789".to_string(),
+                text: "Test".to_string(),
+                metadata: None,
+            }],
+            headers: None,
+        };
+
+        let output = serialize(&file);
+        assert!(output.contains("01:23:45,678 --> 01:24:56,789"));
+    }
+
+    #[test]
+    fn test_parse_single_entry() {
+        let content = r#"1
+00:00:00,000 --> 00:00:01,000
+Single entry
+"#;
+
+        let result = parse(content).unwrap();
+        assert_eq!(result.entries.len(), 1);
+        assert_eq!(result.entries[0].text, "Single entry");
+        assert_eq!(result.entries[0].index, 1);
+    }
+
+    #[test]
+    fn test_parse_consecutive_blocks_no_blank_line() {
+        let content = r#"1
+00:00:00,000 --> 00:00:01,000
+First
+2
+00:00:01,000 --> 00:00:02,000
+Second
+"#;
+
+        let result = parse(content).unwrap();
+        assert_eq!(result.entries.len(), 2);
+        assert_eq!(result.entries[0].text, "First");
+        assert_eq!(result.entries[1].text, "Second");
+    }
 }
