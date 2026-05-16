@@ -917,7 +917,7 @@ CRITICAL FORMAT INSTRUCTIONS:
                     let cancel_flag = cancel_flag.clone();
                     let original_map = &original_map;
                     let mut on_entry_clone = on_entry.clone();
-                    
+
                     futures.push(async move {
                         let result = self.translate_streaming_batch(
                             system_prompt,
