@@ -121,7 +121,9 @@ fn extract_tags(text: &str) -> (String, Vec<(usize, String)>) {
 }
 
 /// Analisa tags e separa em categorias
-fn categorize_tags(tags: Vec<(usize, String)>) -> (Vec<String>, Vec<String>, HashMap<usize, Vec<String>>) {
+fn categorize_tags(
+    tags: Vec<(usize, String)>,
+) -> (Vec<String>, Vec<String>, HashMap<usize, Vec<String>>) {
     let mut opening = Vec::new();
     let mut closing = Vec::new();
     let mut inline: HashMap<usize, Vec<String>> = HashMap::new();
