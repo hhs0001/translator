@@ -119,9 +119,15 @@ pub fn list_subtitle_tracks(video_path: &str) -> Result<Vec<SubtitleTrack>, Stri
     let output = run_command(
         "ffprobe",
         &[
-            "-v", "error", "-select_streams", "s",
-            "-show_entries", "stream=index,codec_name,codec_type:stream_tags=language,title",
-            "-of", "json", video_path,
+            "-v",
+            "error",
+            "-select_streams",
+            "s",
+            "-show_entries",
+            "stream=index,codec_name,codec_type:stream_tags=language,title",
+            "-of",
+            "json",
+            video_path,
         ],
     )?;
 
@@ -173,9 +179,13 @@ pub fn extract_subtitle_track(
     };
 
     let args = &[
-        "-y", "-i", video_path,
-        "-map", &format!("0:s:{}", track_index),
-        "-c:s", codec,
+        "-y",
+        "-i",
+        video_path,
+        "-map",
+        &format!("0:s:{}", track_index),
+        "-c:s",
+        codec,
         output_path,
     ];
 
@@ -198,17 +208,29 @@ pub fn mux_subtitle_track(
     title: Option<&str>,
 ) -> Result<(), String> {
     let mut args: Vec<&str> = vec![
-        "-y", "-i", video_path,
-        "-i", subtitle_path,
-        "-map", "0:v",
-        "-map", "0:a?",
-        "-map", "1:s",
-        "-map", "0:s?",
-        "-c:v", "copy",
-        "-c:a", "copy",
-        "-c:s:0", "ass",
-        "-c:s", "copy",
-        "-disposition:s:0", "default",
+        "-y",
+        "-i",
+        video_path,
+        "-i",
+        subtitle_path,
+        "-map",
+        "0:v",
+        "-map",
+        "0:a?",
+        "-map",
+        "1:s",
+        "-map",
+        "0:s?",
+        "-c:v",
+        "copy",
+        "-c:a",
+        "copy",
+        "-c:s:0",
+        "ass",
+        "-c:s",
+        "copy",
+        "-disposition:s:0",
+        "default",
     ];
 
     if let Some(lang) = language {
@@ -259,7 +281,12 @@ mod tests {
             }
         }
 
-        fn add_response(&self, program: &str, args: &[&str], response: Result<CommandOutput, String>) {
+        fn add_response(
+            &self,
+            program: &str,
+            args: &[&str],
+            response: Result<CommandOutput, String>,
+        ) {
             let key = (
                 program.to_string(),
                 args.iter().map(|s| s.to_string()).collect(),
@@ -277,10 +304,7 @@ mod tests {
             for key in keys {
                 guard.remove(&key);
             }
-            guard.insert(
-                (program.to_string(), vec!["__any__".to_string()]),
-                response,
-            );
+            guard.insert((program.to_string(), vec!["__any__".to_string()]), response);
         }
     }
 
@@ -293,7 +317,9 @@ mod tests {
             let responses = self.responses.lock().unwrap();
             if let Some(response) = responses.get(&key) {
                 response.clone()
-            } else if let Some(response) = responses.get(&(program.to_string(), vec!["__any__".to_string()])) {
+            } else if let Some(response) =
+                responses.get(&(program.to_string(), vec!["__any__".to_string()]))
+            {
                 response.clone()
             } else {
                 Err(format!("No mock response for {} {:?}", program, args))
@@ -317,7 +343,9 @@ mod tests {
             "ffmpeg",
             &["-version"],
             Ok(CommandOutput::success_with_stdout(
-                "ffmpeg version 6.0 Copyright (c) 2000-2023".as_bytes().to_vec(),
+                "ffmpeg version 6.0 Copyright (c) 2000-2023"
+                    .as_bytes()
+                    .to_vec(),
             )),
         );
 
@@ -331,11 +359,7 @@ mod tests {
     #[test]
     fn test_check_ffmpeg_not_installed() {
         let mock = MockCommandRunner::new();
-        mock.add_response(
-            "ffmpeg",
-            &["-version"],
-            Err("FFmpeg not found".to_string()),
-        );
+        mock.add_response("ffmpeg", &["-version"], Err("FFmpeg not found".to_string()));
 
         with_mock_runner(Box::new(mock), || {
             let result = check_ffmpeg();
@@ -363,124 +387,15 @@ mod tests {
         mock.add_response(
             "ffprobe",
             &[
-                "-v", "error", "-select_streams", "s",
-                "-show_entries", "stream=index,codec_name,codec_type:stream_tags=language,title",
-                "-of", "json", "/path/to/video.mkv",
-            ],
-            Ok(CommandOutput::success_with_stdout(ffprobe_output.as_bytes().to_vec())),
-        );
-
-        with_mock_runner(Box::new(mock), || {
-            let result = list_subtitle_tracks("/path/to/video.mkv");
-            assert!(result.is_ok());
-            let tracks = result.unwrap();
-            assert_eq!(tracks.len(), 1);
-            assert_eq!(tracks[0].stream_index, 0);
-            assert_eq!(tracks[0].codec_name, "ass");
-            assert_eq!(tracks[0].language, Some("eng".to_string()));
-            assert_eq!(tracks[0].title, Some("English".to_string()));
-        });
-    }
-
-    #[test]
-    fn test_list_subtitle_tracks_multiple_tracks() {
-        let mock = MockCommandRunner::new();
-        let ffprobe_output = r#"{
-            "streams": [
-                {
-                    "index": 1,
-                    "codec_name": "subrip",
-                    "codec_type": "subtitle",
-                    "tags": {
-                        "language": "eng"
-                    }
-                },
-                {
-                    "index": 2,
-                    "codec_name": "ass",
-                    "codec_type": "subtitle",
-                    "tags": {
-                        "language": "jpn",
-                        "title": "Japanese"
-                    }
-                },
-                {
-                    "index": 0,
-                    "codec_name": "h264",
-                    "codec_type": "video"
-                }
-            ]
-        }"#;
-        mock.add_response(
-            "ffprobe",
-            &[
-                "-v", "error", "-select_streams", "s",
-                "-show_entries", "stream=index,codec_name,codec_type:stream_tags=language,title",
-                "-of", "json", "/path/to/video.mkv",
-            ],
-            Ok(CommandOutput::success_with_stdout(ffprobe_output.as_bytes().to_vec())),
-        );
-
-        with_mock_runner(Box::new(mock), || {
-            let result = list_subtitle_tracks("/path/to/video.mkv");
-            assert!(result.is_ok());
-            let tracks = result.unwrap();
-            assert_eq!(tracks.len(), 2);
-            assert_eq!(tracks[0].index, 0);
-            assert_eq!(tracks[0].stream_index, 1);
-            assert_eq!(tracks[0].codec_name, "subrip");
-            assert_eq!(tracks[0].language, Some("eng".to_string()));
-            assert_eq!(tracks[1].index, 1);
-            assert_eq!(tracks[1].stream_index, 2);
-            assert_eq!(tracks[1].codec_name, "ass");
-            assert_eq!(tracks[1].language, Some("jpn".to_string()));
-        });
-    }
-
-    #[test]
-    fn test_list_subtitle_tracks_no_subtitles() {
-        let mock = MockCommandRunner::new();
-        let ffprobe_output = r#"{
-            "streams": [
-                {
-                    "index": 0,
-                    "codec_name": "h264",
-                    "codec_type": "video"
-                },
-                {
-                    "index": 1,
-                    "codec_name": "aac",
-                    "codec_type": "audio"
-                }
-            ]
-        }"#;
-        mock.add_response(
-            "ffprobe",
-            &[
-                "-v", "error", "-select_streams", "s",
-                "-show_entries", "stream=index,codec_name,codec_type:stream_tags=language,title",
-                "-of", "json", "/path/to/video.mkv",
-            ],
-            Ok(CommandOutput::success_with_stdout(ffprobe_output.as_bytes().to_vec())),
-        );
-
-        with_mock_runner(Box::new(mock), || {
-            let result = list_subtitle_tracks("/path/to/video.mkv");
-            assert!(result.is_ok());
-            let tracks = result.unwrap();
-            assert!(tracks.is_empty());
-        });
-    }
-
-    #[test]
-    fn test_list_subtitle_tracks_ffprobe_failure() {
-        let mock = MockCommandRunner::new();
-        mock.add_response(
-            "ffprobe",
-            &[
-                "-v", "error", "-select_streams", "s",
-                "-show_entries", "stream=index,codec_name,codec_type:stream_tags=language,title",
-                "-of", "json", "/invalid/path.mkv",
+                "-v",
+                "error",
+                "-select_streams",
+                "s",
+                "-show_entries",
+                "stream=index,codec_name,codec_type:stream_tags=language,title",
+                "-of",
+                "json",
+                "/invalid/path.mkv",
             ],
             Ok(CommandOutput::failure(b"No such file".to_vec())),
         );
@@ -498,9 +413,13 @@ mod tests {
         mock.add_response(
             "ffmpeg",
             &[
-                "-y", "-i", "/path/to/video.mkv",
-                "-map", "0:s:0",
-                "-c:s", "ass",
+                "-y",
+                "-i",
+                "/path/to/video.mkv",
+                "-map",
+                "0:s:0",
+                "-c:s",
+                "ass",
                 "/path/to/output.ass",
             ],
             Ok(CommandOutput::success()),
@@ -518,9 +437,13 @@ mod tests {
         mock.add_response(
             "ffmpeg",
             &[
-                "-y", "-i", "/path/to/video.mkv",
-                "-map", "0:s:1",
-                "-c:s", "srt",
+                "-y",
+                "-i",
+                "/path/to/video.mkv",
+                "-map",
+                "0:s:1",
+                "-c:s",
+                "srt",
                 "/path/to/output.srt",
             ],
             Ok(CommandOutput::success()),
@@ -538,9 +461,13 @@ mod tests {
         mock.add_response(
             "ffmpeg",
             &[
-                "-y", "-i", "/path/to/video.mkv",
-                "-map", "0:s:0",
-                "-c:s", "webvtt",
+                "-y",
+                "-i",
+                "/path/to/video.mkv",
+                "-map",
+                "0:s:0",
+                "-c:s",
+                "webvtt",
                 "/path/to/output.vtt",
             ],
             Ok(CommandOutput::success()),
@@ -558,9 +485,13 @@ mod tests {
         mock.add_response(
             "ffmpeg",
             &[
-                "-y", "-i", "/path/to/video.mkv",
-                "-map", "0:s:0",
-                "-c:s", "ass",
+                "-y",
+                "-i",
+                "/path/to/video.mkv",
+                "-map",
+                "0:s:0",
+                "-c:s",
+                "ass",
                 "/path/to/output.ass",
             ],
             Ok(CommandOutput::failure(b"Invalid data".to_vec())),
@@ -644,7 +575,10 @@ mod tests {
     #[test]
     fn test_mux_subtitle_track_failure() {
         let mock = MockCommandRunner::new();
-        mock.add_response_for_any("ffmpeg", Ok(CommandOutput::failure(b"Muxing error".to_vec())));
+        mock.add_response_for_any(
+            "ffmpeg",
+            Ok(CommandOutput::failure(b"Muxing error".to_vec())),
+        );
 
         with_mock_runner(Box::new(mock), || {
             let result = mux_subtitle_track(

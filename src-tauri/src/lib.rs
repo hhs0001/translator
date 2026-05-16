@@ -20,7 +20,7 @@ use translator::{
     ApiFormat, BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
     TranslationProgress, TranslationSettings, TRANSLATION_CANCELLED_ERROR,
 };
-use text_cleaner::{TextCleanerConfig, clean_subtitle_entries, reapply_all_tags};
+use text_cleaner::{clean_subtitle_entries, reapply_all_tags, TextCleanerConfig};
 
 // ============================================================================
 // Comandos de Legendas
@@ -289,10 +289,18 @@ async fn translate_subtitle_full(
     // Prepara dados para tradução (com ou sem limpeza)
     let (texts_to_translate, cleaned_data, total) = if use_cleaner {
         // Extrai textos com metadados de estilo para limpeza
-        let entries_with_style: Vec<(usize, String, Option<String>)> = file.entries.iter()
-            .map(|e| (e.index, e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+        let entries_with_style: Vec<(usize, String, Option<String>)> = file
+            .entries
+            .iter()
+            .map(|e| {
+                (
+                    e.index,
+                    e.text.clone(),
+                    e.metadata.as_ref().and_then(|m| m.style.clone()),
+                )
+            })
             .collect();
-        
+
         let cleaned = clean_subtitle_entries(&entries_with_style, &cleaner_config);
         let total = cleaned.mappings.len();
         let texts: Vec<(usize, String)> = cleaned.texts_to_translate.clone();
@@ -338,7 +346,8 @@ async fn translate_subtitle_full(
 
         // Reaplica tags se usou cleaner, senão aplica normal
         let final_translations = if let Some(ref cleaned) = cleaned_data {
-            let translations_map: std::collections::HashMap<usize, String> = translations.into_iter().collect();
+let translations_map: std::collections::HashMap<usize, String> =
+                translations.into_iter().collect();
             reapply_all_tags(cleaned, &translations_map, &cleaner_config)
         } else {
             translations
@@ -440,7 +449,8 @@ async fn translate_subtitle_full(
 
     // Reaplica tags se usou cleaner, senão aplica normal
     let final_translations = if let Some(ref cleaned) = cleaned_data {
-        let translations_map: std::collections::HashMap<usize, String> = translations.into_iter().collect();
+        let translations_map: std::collections::HashMap<usize, String> =
+                translations.into_iter().collect();
         reapply_all_tags(cleaned, &translations_map, &cleaner_config)
     } else {
         translations
@@ -629,13 +639,22 @@ async fn continue_translation(
 
 /// Análise de "lixo" em arquivo ASS
 #[tauri::command]
-async fn analyze_subtitle_clutter(file: SubtitleFile) -> Result<text_cleaner::AssClutterAnalysis, String> {
+async fn analyze_subtitle_clutter(
+    file: SubtitleFile,
+) -> Result<text_cleaner::AssClutterAnalysis, String> {
     use text_cleaner::analyze_ass_clutter;
-    
-    let entries: Vec<(String, Option<String>)> = file.entries.iter()
-        .map(|e| (e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+
+    let entries: Vec<(String, Option<String>)> = file
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.text.clone(),
+                e.metadata.as_ref().and_then(|m| m.style.clone()),
+            )
+        })
         .collect();
-    
+
     Ok(analyze_ass_clutter(&entries))
 }
 
@@ -646,16 +665,33 @@ async fn preview_cleaned_text(
     config: TextCleanerConfig,
 ) -> Result<Vec<(usize, String, String, bool)>, String> {
     // (index, original, cleaned, should_skip)
-    let entries: Vec<(usize, String, Option<String>)> = file.entries.iter()
-        .map(|e| (e.index, e.text.clone(), e.metadata.as_ref().and_then(|m| m.style.clone())))
+    let entries: Vec<(usize, String, Option<String>)> = file
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.index,
+                e.text.clone(),
+                e.metadata.as_ref().and_then(|m| m.style.clone()),
+            )
+        })
         .collect();
-    
+
     let cleaned = clean_subtitle_entries(&entries, &config);
-    
-    let result = cleaned.mappings.iter()
-        .map(|m| (m.entry_index, m.original_text.clone(), m.clean_text.clone(), m.should_skip_translation))
+
+    let result = cleaned
+        .mappings
+        .iter()
+        .map(|m| {
+            (
+                m.entry_index,
+                m.original_text.clone(),
+                m.clean_text.clone(),
+                m.should_skip_translation,
+            )
+        })
         .collect();
-    
+
     Ok(result)
 }
 
@@ -1309,7 +1345,10 @@ mod tests {
         assert_eq!(restored.output_mode, settings.output_mode);
         assert_eq!(restored.mux_language, settings.mux_language);
         assert_eq!(restored.text_cleaner_enabled, settings.text_cleaner_enabled);
-        assert_eq!(restored.text_cleaner_ignored_styles, settings.text_cleaner_ignored_styles);
+        assert_eq!(
+            restored.text_cleaner_ignored_styles,
+            settings.text_cleaner_ignored_styles
+        );
     }
 
     #[test]
@@ -1395,7 +1434,10 @@ mod tests {
         assert_eq!(default_mux_title(), "Portuguese");
         assert_eq!(default_language(), "en");
         assert_eq!(default_text_cleaner_preserve_basic(), true);
-        assert_eq!(default_text_cleaner_ignored_styles(), vec!["draw".to_string()]);
+        assert_eq!(
+            default_text_cleaner_ignored_styles(),
+            vec!["draw".to_string()]
+        );
     }
 
     #[test]
@@ -1405,7 +1447,7 @@ mod tests {
         std::fs::write(&test_file, b"fake video content").unwrap();
 
         let result = get_file_info(test_file.to_string_lossy().to_string()).unwrap();
-        
+
         assert!(result.is_video);
         assert!(!result.is_subtitle);
         assert_eq!(result.extension, "mp4");
@@ -1418,7 +1460,7 @@ mod tests {
     #[test]
     fn test_file_info_subtitle_extensions() {
         let temp_dir = std::env::temp_dir();
-        
+
         for ext in &["srt", "ass", "ssa", "vtt"] {
             let test_file = temp_dir.join(format!("test_subtitle.{}", ext));
             std::fs::write(&test_file, b"fake subtitle content").unwrap();
