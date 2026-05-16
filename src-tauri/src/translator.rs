@@ -748,7 +748,10 @@ CRITICAL FORMAT INSTRUCTIONS:
                 Err(e) => {
                     retries += 1;
                     if retries > max_retries {
-                        return Err(format!("Batch {}: Translation request failed after {} retries: {}", batch_index, max_retries, e));
+                        return Err(format!(
+                            "Batch {}: Translation request failed after {} retries: {}",
+                            batch_index, max_retries, e
+                        ));
                     }
                     check_cancelled(&cancel_flag)?;
                     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -761,7 +764,10 @@ CRITICAL FORMAT INSTRUCTIONS:
                 let body = response.text().await.unwrap_or_default();
                 retries += 1;
                 if retries > max_retries {
-                    return Err(format!("Batch {}: Translation API error {} after {} retries: {}", batch_index, status, max_retries, body));
+                    return Err(format!(
+                        "Batch {}: Translation API error {} after {} retries: {}",
+                        batch_index, status, max_retries, body
+                    ));
                 }
                 check_cancelled(&cancel_flag)?;
                 tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -800,14 +806,11 @@ CRITICAL FORMAT INSTRUCTIONS:
                                         for ch in content.chars() {
                                             if ch == '\n' {
                                                 // End of a line - try to parse
-                                                let line_content =
-                                                    current_text.trim().to_string();
-                                                if let Some((idx, text)) =
-                                                    parse_translation_line(
-                                                        &line_content,
-                                                        NEWLINE_PLACEHOLDER,
-                                                    )
-                                                {
+                                                let line_content = current_text.trim().to_string();
+                                                if let Some((idx, text)) = parse_translation_line(
+                                                    &line_content,
+                                                    NEWLINE_PLACEHOLDER,
+                                                ) {
                                                     // Validate ASS tag compatibility
                                                     let should_emit = original_map
                                                         .get(&idx)
@@ -834,10 +837,7 @@ CRITICAL FORMAT INSTRUCTIONS:
                             }
                             Err(e) => {
                                 #[cfg(debug_assertions)]
-                                eprintln!(
-                                    "Failed to parse SSE chunk: {} - JSON: {}",
-                                    e, json_str
-                                );
+                                eprintln!("Failed to parse SSE chunk: {} - JSON: {}", e, json_str);
                                 let _ = e;
                             }
                         }
@@ -849,9 +849,7 @@ CRITICAL FORMAT INSTRUCTIONS:
 
             // Process last line of the batch if any
             let line_content = current_text.trim().to_string();
-            if let Some((idx, text)) =
-                parse_translation_line(&line_content, NEWLINE_PLACEHOLDER)
-            {
+            if let Some((idx, text)) = parse_translation_line(&line_content, NEWLINE_PLACEHOLDER) {
                 let should_emit = original_map
                     .get(&idx)
                     .map(|orig| Self::tags_compatible(orig, &text))
@@ -917,17 +915,19 @@ CRITICAL FORMAT INSTRUCTIONS:
                     let cancel_flag = cancel_flag.clone();
                     let original_map = &original_map;
                     let mut on_entry_clone = on_entry.clone();
-                    
+
                     futures.push(async move {
-                        let result = self.translate_streaming_batch(
-                            system_prompt,
-                            &batch,
-                            batch_idx,
-                            max_retries,
-                            cancel_flag,
-                            original_map,
-                            &mut on_entry_clone,
-                        ).await;
+                        let result = self
+                            .translate_streaming_batch(
+                                system_prompt,
+                                &batch,
+                                batch_idx,
+                                max_retries,
+                                cancel_flag,
+                                original_map,
+                                &mut on_entry_clone,
+                            )
+                            .await;
                         (batch_idx, result)
                     });
                 }

@@ -359,7 +359,11 @@ pub fn reapply_tags(
         let (_original_clean, tags) = extract_tags(&original_mapping.original_text);
         let basic_tags: Vec<_> = tags
             .into_iter()
-            .filter(|(_, tag)| BASIC_FORMATTING_TAGS.iter().any(|basic| tag.starts_with(basic)))
+            .filter(|(_, tag)| {
+                BASIC_FORMATTING_TAGS
+                    .iter()
+                    .any(|basic| tag.starts_with(basic))
+            })
             .collect();
 
         if !basic_tags.is_empty() {
@@ -414,7 +418,7 @@ pub fn has_heavy_visual_effects(text: &str) -> bool {
             }
         }
     }
-    
+
     false
 }
 
@@ -464,7 +468,7 @@ pub fn analyze_ass_clutter(entries: &[(String, Option<String>)]) -> AssClutterAn
             lines_with_positioning += 1;
         }
     }
-    
+
     AssClutterAnalysis {
         total_lines,
         lines_with_effects,
@@ -513,14 +517,9 @@ mod tests {
             preserve_basic_formatting: true,
             ..Default::default()
         };
-        
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
-        
+
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
+
         assert_eq!(mapping.clean_text, "Hello World");
         assert!(mapping.opening_tags.iter().any(|t| t.contains("i1")));
     }
@@ -533,14 +532,14 @@ mod tests {
             preserve_positioning: false,
             ..Default::default()
         };
-        
+
         let mapping = clean_text_for_translation(
             r"{\pos(640,360)\blur1\c&HFFFFFF&}Hello World",
             None,
             1,
             &config,
         );
-        
+
         assert_eq!(mapping.clean_text, "Hello World");
         assert!(mapping.opening_tags.is_empty());
     }
@@ -552,14 +551,9 @@ mod tests {
             preserve_basic_formatting: true,
             ..Default::default()
         };
-        
-        let mapping = clean_text_for_translation(
-            r"{\i1}Hello World{\i0}",
-            None,
-            1,
-            &config,
-        );
-        
+
+        let mapping = clean_text_for_translation(r"{\i1}Hello World{\i0}", None, 1, &config);
+
         let result = reapply_tags("Olá Mundo", &mapping, &config);
         assert!(result.contains("{\\i1}"));
         assert!(result.contains("Olá Mundo"));
@@ -572,14 +566,9 @@ mod tests {
             ignored_styles: vec!["Title".to_string()],
             ..Default::default()
         };
-        
-        let mapping = clean_text_for_translation(
-            "Some text",
-            Some("Title1"),
-            1,
-            &config,
-        );
-        
+
+        let mapping = clean_text_for_translation("Some text", Some("Title1"), 1, &config);
+
         assert!(mapping.should_skip_translation);
     }
 
