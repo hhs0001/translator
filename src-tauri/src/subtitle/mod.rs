@@ -110,27 +110,54 @@ mod tests {
 
     #[test]
     fn test_detect_format_srt() {
-        assert_eq!(SubtitleFile::detect_format("movie.srt"), Some(SubtitleFormat::Srt));
-        assert_eq!(SubtitleFile::detect_format("subtitles.SRT"), Some(SubtitleFormat::Srt));
-        assert_eq!(SubtitleFile::detect_format("video.srt"), Some(SubtitleFormat::Srt));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.srt"),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("subtitles.SRT"),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("video.srt"),
+            Some(SubtitleFormat::Srt)
+        );
     }
 
     #[test]
     fn test_detect_format_ass() {
-        assert_eq!(SubtitleFile::detect_format("movie.ass"), Some(SubtitleFormat::Ass));
-        assert_eq!(SubtitleFile::detect_format("subtitles.ASS"), Some(SubtitleFormat::Ass));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.ass"),
+            Some(SubtitleFormat::Ass)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("subtitles.ASS"),
+            Some(SubtitleFormat::Ass)
+        );
     }
 
     #[test]
     fn test_detect_format_ssa() {
-        assert_eq!(SubtitleFile::detect_format("movie.ssa"), Some(SubtitleFormat::Ssa));
-        assert_eq!(SubtitleFile::detect_format("sub.SSA"), Some(SubtitleFormat::Ssa));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.ssa"),
+            Some(SubtitleFormat::Ssa)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("sub.SSA"),
+            Some(SubtitleFormat::Ssa)
+        );
     }
 
     #[test]
     fn test_detect_format_vtt() {
-        assert_eq!(SubtitleFile::detect_format("movie.vtt"), Some(SubtitleFormat::Vtt));
-        assert_eq!(SubtitleFile::detect_format("subs.VTT"), Some(SubtitleFormat::Vtt));
+        assert_eq!(
+            SubtitleFile::detect_format("movie.vtt"),
+            Some(SubtitleFormat::Vtt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("subs.VTT"),
+            Some(SubtitleFormat::Vtt)
+        );
     }
 
     #[test]
@@ -138,15 +165,27 @@ mod tests {
         assert_eq!(SubtitleFile::detect_format("movie.txt"), None);
         assert_eq!(SubtitleFile::detect_format("movie.mp4"), None);
         assert_eq!(SubtitleFile::detect_format("movie"), None);
-        assert_eq!(SubtitleFile::detect_format(".srt"), Some(SubtitleFormat::Srt));
+        assert_eq!(
+            SubtitleFile::detect_format(".srt"),
+            Some(SubtitleFormat::Srt)
+        );
         assert_eq!(SubtitleFile::detect_format("noextension"), None);
     }
 
     #[test]
     fn test_detect_format_with_path() {
-        assert_eq!(SubtitleFile::detect_format("/path/to/movie.srt"), Some(SubtitleFormat::Srt));
-        assert_eq!(SubtitleFile::detect_format("C:\\Users\\test\\file.ass"), Some(SubtitleFormat::Ass));
-        assert_eq!(SubtitleFile::detect_format("/home/user/Desktop/subtitles.vtt"), Some(SubtitleFormat::Vtt));
+        assert_eq!(
+            SubtitleFile::detect_format("/path/to/movie.srt"),
+            Some(SubtitleFormat::Srt)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("C:\\Users\\test\\file.ass"),
+            Some(SubtitleFormat::Ass)
+        );
+        assert_eq!(
+            SubtitleFile::detect_format("/home/user/Desktop/subtitles.vtt"),
+            Some(SubtitleFormat::Vtt)
+        );
     }
 
     #[test]
@@ -154,9 +193,27 @@ mod tests {
         let file = SubtitleFile {
             format: SubtitleFormat::Srt,
             entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01,000".to_string(), end_time: "00:00:04,000".to_string(), text: "First text".to_string(), metadata: None },
-                SubtitleEntry { index: 2, start_time: "00:00:05,000".to_string(), end_time: "00:00:08,000".to_string(), text: "Second text".to_string(), metadata: None },
-                SubtitleEntry { index: 3, start_time: "00:00:09,000".to_string(), end_time: "00:00:12,000".to_string(), text: "Third text".to_string(), metadata: None },
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "00:00:01,000".to_string(),
+                    end_time: "00:00:04,000".to_string(),
+                    text: "First text".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "00:00:05,000".to_string(),
+                    end_time: "00:00:08,000".to_string(),
+                    text: "Second text".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 3,
+                    start_time: "00:00:09,000".to_string(),
+                    end_time: "00:00:12,000".to_string(),
+                    text: "Third text".to_string(),
+                    metadata: None,
+                },
             ],
             headers: None,
         };
@@ -173,8 +230,20 @@ mod tests {
         let mut file = SubtitleFile {
             format: SubtitleFormat::Srt,
             entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01,000".to_string(), end_time: "00:00:04,000".to_string(), text: "Original".to_string(), metadata: None },
-                SubtitleEntry { index: 2, start_time: "00:00:05,000".to_string(), end_time: "00:00:08,000".to_string(), text: "Original 2".to_string(), metadata: None },
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "00:00:01,000".to_string(),
+                    end_time: "00:00:04,000".to_string(),
+                    text: "Original".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "00:00:05,000".to_string(),
+                    end_time: "00:00:08,000".to_string(),
+                    text: "Original 2".to_string(),
+                    metadata: None,
+                },
             ],
             headers: None,
         };
@@ -195,16 +264,32 @@ mod tests {
         let mut file = SubtitleFile {
             format: SubtitleFormat::Srt,
             entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01,000".to_string(), end_time: "00:00:04,000".to_string(), text: "Original".to_string(), metadata: None },
-                SubtitleEntry { index: 2, start_time: "00:00:05,000".to_string(), end_time: "00:00:08,000".to_string(), text: "Original 2".to_string(), metadata: None },
-                SubtitleEntry { index: 3, start_time: "00:00:09,000".to_string(), end_time: "00:00:12,000".to_string(), text: "Original 3".to_string(), metadata: None },
+                SubtitleEntry {
+                    index: 1,
+                    start_time: "00:00:01,000".to_string(),
+                    end_time: "00:00:04,000".to_string(),
+                    text: "Original".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 2,
+                    start_time: "00:00:05,000".to_string(),
+                    end_time: "00:00:08,000".to_string(),
+                    text: "Original 2".to_string(),
+                    metadata: None,
+                },
+                SubtitleEntry {
+                    index: 3,
+                    start_time: "00:00:09,000".to_string(),
+                    end_time: "00:00:12,000".to_string(),
+                    text: "Original 3".to_string(),
+                    metadata: None,
+                },
             ],
             headers: None,
         };
 
-        let translations = vec![
-            (2, "Translated 2".to_string()),
-        ];
+        let translations = vec![(2, "Translated 2".to_string())];
 
         file.apply_translations(translations);
 
@@ -267,9 +352,13 @@ Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0000,0000,0000,,Hello ASS
     fn test_serialize_vtt_not_implemented() {
         let file = SubtitleFile {
             format: SubtitleFormat::Vtt,
-            entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01.000".to_string(), end_time: "00:00:04.000".to_string(), text: "Hello".to_string(), metadata: None },
-            ],
+            entries: vec![SubtitleEntry {
+                index: 1,
+                start_time: "00:00:01.000".to_string(),
+                end_time: "00:00:04.000".to_string(),
+                text: "Hello".to_string(),
+                metadata: None,
+            }],
             headers: None,
         };
         let result = file.serialize();

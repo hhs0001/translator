@@ -215,7 +215,8 @@ Another valid
 
     #[test]
     fn test_parse_mac_line_endings() {
-        let content = "1\r00:00:00,000 --> 00:00:01,000\rFirst\r\r2\r00:00:01,000 --> 00:00:02,000\rSecond\r";
+        let content =
+            "1\r00:00:00,000 --> 00:00:01,000\rFirst\r\r2\r00:00:01,000 --> 00:00:02,000\rSecond\r";
         let result = parse(content).unwrap();
         assert_eq!(result.entries.len(), 2);
     }

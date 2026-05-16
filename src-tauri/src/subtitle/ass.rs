@@ -770,8 +770,9 @@ Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0000,0000,0000,,Zero margins
 
         let output = serialize(&file);
         assert!(output.contains("[Events]"));
-        assert!(output
-            .contains("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"));
+        assert!(output.contains(
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+        ));
         assert!(output.contains("Dialogue:"));
     }
 
