@@ -12,37 +12,37 @@ static CUE_SETTING_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("invalid cue setting regex")
 });
 
+static TAG_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
+    vec![
+        Regex::new(r"<c\.[^>]*>").unwrap(),
+        Regex::new(r"</c>").unwrap(),
+        Regex::new(r"<v\.[^>]*>").unwrap(),
+        Regex::new(r"</v>").unwrap(),
+        Regex::new(r"<v>").unwrap(),
+        Regex::new(r"</v>").unwrap(),
+        Regex::new(r"<lang\.[^>]*>").unwrap(),
+        Regex::new(r"</lang>").unwrap(),
+        Regex::new(r"<b>").unwrap(),
+        Regex::new(r"</b>").unwrap(),
+        Regex::new(r"<i>").unwrap(),
+        Regex::new(r"</i>").unwrap(),
+        Regex::new(r"<u>").unwrap(),
+        Regex::new(r"</u>").unwrap(),
+        Regex::new(r"<\/?ruby[^>]*>").unwrap(),
+        Regex::new(r"<\/?rt[^>]*>").unwrap(),
+        Regex::new(r"<\/?rt>").unwrap(),
+    ]
+});
+
 fn parse_timestamp(ts: &str) -> String {
     ts.replace('.', ",")
 }
 
 fn strip_vtt_tags(text: &str) -> String {
     let mut result = text.to_string();
-    let tag_patterns = [
-        r"<c\.[^>]*>",
-        r"</c>",
-        r"<v\.[^>]*>",
-        r"</v>",
-        r"<v>",
-        r"</v>",
-        r"<lang\.[^>]*>",
-        r"</lang>",
-        r"<b>",
-        r"</b>",
-        r"<i>",
-        r"</i>",
-        r"<u>",
-        r"</u>",
-        r"<\/?ruby[^>]*>",
-        r"<\/?rt[^>]*>",
-        r"<\/?rt>",
-    ];
-
-    for pattern in &tag_patterns {
-        let re = Regex::new(pattern).expect("invalid pattern");
-        result = re.replace_all(&result, "").to_string();
+    for pattern in TAG_PATTERNS.iter() {
+        result = pattern.replace_all(&result, "").to_string();
     }
-
     result.trim().to_string()
 }
 
@@ -111,10 +111,13 @@ pub fn parse(content: &str) -> Result<SubtitleFile, String> {
         let start_time = parse_timestamp(&ts_caps[1]);
         let end_time = parse_timestamp(&ts_caps[2]);
 
+        let cue_settings_start = ts_caps.get(0).map(|m| m.end()).unwrap_or(0);
+        let cue_settings_str = &line[cue_settings_start..];
+        let metadata = parse_cue_settings(cue_settings_str);
+
         index += 1;
 
         let mut text_lines = Vec::new();
-        let mut metadata = None;
 
         while let Some(&next) = lines_iter.peek() {
             let next = next.trim();
@@ -129,7 +132,9 @@ pub fn parse(content: &str) -> Result<SubtitleFile, String> {
             lines_iter.next();
 
             if next.contains(':') && !next.contains("<") {
-                metadata = parse_cue_settings(next);
+                if let Some(settings) = parse_cue_settings(next) {
+                    metadata = Some(settings);
+                }
                 continue;
             }
 
