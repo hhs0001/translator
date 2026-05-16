@@ -1,5 +1,6 @@
 pub mod ass;
 pub mod srt;
+pub mod vtt;
 
 use serde::{Deserialize, Serialize};
 
@@ -73,7 +74,7 @@ impl SubtitleFile {
         match format {
             SubtitleFormat::Srt => srt::parse(content),
             SubtitleFormat::Ass | SubtitleFormat::Ssa => ass::parse(content),
-            SubtitleFormat::Vtt => Err("VTT parsing not yet implemented".to_string()),
+            SubtitleFormat::Vtt => vtt::parse(content),
         }
     }
 
@@ -82,7 +83,7 @@ impl SubtitleFile {
         match self.format {
             SubtitleFormat::Srt => srt::serialize(self),
             SubtitleFormat::Ass | SubtitleFormat::Ssa => ass::serialize(self),
-            SubtitleFormat::Vtt => "".to_string(), // TODO
+            SubtitleFormat::Vtt => vtt::serialize(self),
         }
     }
 
