@@ -503,6 +503,43 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_tags_no_tags() {
+        let text = "Plain text without tags";
+        let (clean, tags) = extract_tags(text);
+        assert_eq!(clean, "Plain text without tags");
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn test_extract_tags_multiple_tags_same_position() {
+        let text = r"{\i1\b1}Bold and Italic";
+        let (clean, tags) = extract_tags(text);
+        assert_eq!(clean, "Bold and Italic");
+        assert_eq!(tags.len(), 1);
+    }
+
+    #[test]
+    fn test_extract_tags_hard_space() {
+        let text = r"Hello\hWorld";
+        let (clean, _) = extract_tags(text);
+        assert_eq!(clean, "Hello World");
+    }
+
+    #[test]
+    fn test_extract_tags_newline_conversion() {
+        let text = r"Line1\NLine2";
+        let (clean, _) = extract_tags(text);
+        assert_eq!(clean, "Line1\nLine2");
+    }
+
+    #[test]
+    fn test_extract_tags_real_newline() {
+        let text = "Line1\nLine2";
+        let (clean, _) = extract_tags(text);
+        assert_eq!(clean, "Line1\nLine2");
+    }
+
+    #[test]
     fn test_clean_text_basic() {
         let config = TextCleanerConfig {
             enabled: true,
@@ -542,6 +579,45 @@ mod tests {
     }
 
     #[test]
+    fn test_clean_text_preserve_positioning() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: false,
+            preserve_positioning: true,
+            ..Default::default()
+        };
+        
+        let mapping = clean_text_for_translation(
+            r"{\pos(640,360)}Hello World",
+            None,
+            1,
+            &config,
+        );
+        
+        assert_eq!(mapping.clean_text, "Hello World");
+        assert!(!mapping.opening_tags.is_empty());
+        assert!(mapping.opening_tags.iter().any(|t| t.contains("pos")));
+    }
+
+    #[test]
+    fn test_clean_text_disabled() {
+        let config = TextCleanerConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        
+        let mapping = clean_text_for_translation(
+            r"{\i1}Hello World{\i0}",
+            None,
+            1,
+            &config,
+        );
+        
+        assert_eq!(mapping.clean_text, r"{\i1}Hello World{\i0}");
+        assert!(mapping.opening_tags.is_empty());
+    }
+
+    #[test]
     fn test_reapply_tags() {
         let config = TextCleanerConfig {
             enabled: true,
@@ -559,6 +635,45 @@ mod tests {
         let result = reapply_tags("Olá Mundo", &mapping, &config);
         assert!(result.contains("{\\i1}"));
         assert!(result.contains("Olá Mundo"));
+    }
+
+    #[test]
+    fn test_reapply_tags_with_closing_tag() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+        
+        let mapping = clean_text_for_translation(
+            r"{\i1}Hello World",
+            None,
+            1,
+            &config,
+        );
+        
+        let result = reapply_tags("Olá Mundo", &mapping, &config);
+        assert!(result.contains("Olá Mundo"));
+    }
+
+    #[test]
+    fn test_reapply_tags_skip_translation() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+        
+        let mapping = clean_text_for_translation(
+            r"{\i1}Hello World{\i0}",
+            Some("Title"),
+            1,
+            &config,
+        );
+        
+        let original = r"{\i1}Hello World{\i0}";
+        let result = reapply_tags("Ignored", &mapping, &config);
+        assert_eq!(result, original);
     }
 
     #[test]
@@ -580,9 +695,357 @@ mod tests {
     }
 
     #[test]
+    fn test_ignored_styles_case_insensitive() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            ignored_styles: vec!["TITLE".to_string()],
+            ..Default::default()
+        };
+        
+        let mapping = clean_text_for_translation(
+            "Some text",
+            Some("title1"),
+            1,
+            &config,
+        );
+        
+        assert!(mapping.should_skip_translation);
+    }
+
+    #[test]
+    fn test_ignored_styles_partial_match() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            ignored_styles: vec!["comment".to_string()],
+            ..Default::default()
+        };
+        
+        let mapping = clean_text_for_translation(
+            "Some text",
+            Some("Commentator"),
+            1,
+            &config,
+        );
+        
+        assert!(mapping.should_skip_translation);
+    }
+
+    #[test]
     fn test_has_heavy_visual_effects() {
         assert!(has_heavy_visual_effects(r"{\pos(100,200)}Hello"));
         assert!(has_heavy_visual_effects(r"{\blur1\frz10}World"));
         assert!(!has_heavy_visual_effects(r"{\i1}Simple{\i0}"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_false_for_basic_formatting() {
+        assert!(!has_heavy_visual_effects(r"{\i1}{\b1}Text{\b0}{\i0}"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_with_blur() {
+        assert!(has_heavy_visual_effects(r"{\blur0.5}Text"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_with_frz() {
+        assert!(has_heavy_visual_effects(r"{\frz45}Rotated Text"));
+    }
+
+    #[test]
+    fn test_has_heavy_visual_effects_with_clip() {
+        assert!(has_heavy_visual_effects(r"{\clip(0,0,100,100)}Clipped"));
+    }
+
+    #[test]
+    fn test_reapply_all_tags() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+        
+        let entries = vec![
+            (1, r"{\i1}Hello{\i0}".to_string(), Some("Default".to_string())),
+            (2, "Plain text".to_string(), None),
+        ];
+        
+        let cleaned = clean_subtitle_entries(&entries, &config);
+        
+        let translations: HashMap<usize, String> = [
+            (1, "Olá".to_string()),
+            (2, "Texto simples".to_string()),
+        ].into_iter().collect();
+        
+        let results = reapply_all_tags(&cleaned, &translations, &config);
+        
+        assert_eq!(results.len(), 2);
+        assert!(results[0].1.contains("Olá"));
+        assert_eq!(results[1].1, "Texto simples");
+    }
+
+    #[test]
+    fn test_reapply_all_tags_partial_translation() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+        
+        let entries = vec![
+            (1, r"{\i1}Hello{\i0}".to_string(), None),
+            (2, "Original 2".to_string(), None),
+        ];
+        
+        let cleaned = clean_subtitle_entries(&entries, &config);
+        
+        let translations: HashMap<usize, String> = [
+            (1, "Olá".to_string()),
+        ].into_iter().collect();
+        
+        let results = reapply_all_tags(&cleaned, &translations, &config);
+        
+        assert_eq!(results.len(), 2);
+        assert!(results[0].1.contains("Olá"));
+        assert_eq!(results[1].1, "Original 2");
+    }
+
+    #[test]
+    fn test_clean_subtitle_entries_all_skipped() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            ignored_styles: vec!["comment".to_string()],
+            ..Default::default()
+        };
+        
+        let entries = vec![
+            (1, "Comment 1".to_string(), Some("Comment".to_string())),
+            (2, "Comment 2".to_string(), Some("Comment".to_string())),
+        ];
+        
+        let cleaned = clean_subtitle_entries(&entries, &config);
+        
+        assert!(cleaned.texts_to_translate.is_empty());
+        assert_eq!(cleaned.mappings.len(), 2);
+        assert!(cleaned.mappings.iter().all(|m| m.should_skip_translation));
+    }
+
+    #[test]
+    fn test_clean_subtitle_entries_empty_input() {
+        let config = TextCleanerConfig::default();
+        let entries: Vec<(usize, String, Option<String>)> = vec![];
+        
+        let cleaned = clean_subtitle_entries(&entries, &config);
+        
+        assert!(cleaned.mappings.is_empty());
+        assert!(cleaned.texts_to_translate.is_empty());
+    }
+
+    #[test]
+    fn test_text_mapping_structure() {
+        let mapping = TextMapping {
+            entry_index: 5,
+            original_text: r"{\i1}Test{\i0}".to_string(),
+            clean_text: "Test".to_string(),
+            opening_tags: vec![r"{\i1}".to_string()],
+            closing_tags: vec![r"{\i0}".to_string()],
+            inline_tags: HashMap::new(),
+            style: Some("Default".to_string()),
+            should_skip_translation: false,
+        };
+        
+        assert_eq!(mapping.entry_index, 5);
+        assert_eq!(mapping.clean_text, "Test");
+        assert!(!mapping.should_skip_translation);
+    }
+
+    #[test]
+    fn test_cleaned_subtitle_structure() {
+        let mapping = TextMapping {
+            entry_index: 1,
+            original_text: "Original".to_string(),
+            clean_text: "Clean".to_string(),
+            opening_tags: vec![],
+            closing_tags: vec![],
+            inline_tags: HashMap::new(),
+            style: None,
+            should_skip_translation: false,
+        };
+        
+        let cleaned = CleanedSubtitle {
+            mappings: vec![mapping],
+            texts_to_translate: vec![(1, "Clean".to_string())],
+        };
+        
+        assert_eq!(cleaned.mappings.len(), 1);
+        assert_eq!(cleaned.texts_to_translate.len(), 1);
+    }
+
+    #[test]
+    fn test_analyze_ass_clutter() {
+        let entries = vec![
+            (r"{\pos(100,200)}Hello".to_string(), Some("Default".to_string())),
+            (r"{\blur1}World".to_string(), Some("Effect".to_string())),
+            (r"{\k100}Karaoke".to_string(), Some("Karaoke".to_string())),
+            ("Normal text".to_string(), None),
+        ];
+        
+        let analysis = analyze_ass_clutter(&entries);
+        
+        assert_eq!(analysis.total_lines, 4);
+        assert_eq!(analysis.lines_with_effects, 2);
+        assert_eq!(analysis.lines_with_positioning, 1);
+    }
+
+    #[test]
+    fn test_analyze_ass_clutter_empty() {
+        let entries: Vec<(String, Option<String>)> = vec![];
+        let analysis = analyze_ass_clutter(&entries);
+        
+        assert_eq!(analysis.total_lines, 0);
+        assert_eq!(analysis.lines_with_effects, 0);
+    }
+
+    #[test]
+    fn test_categorize_tags_opening_and_closing() {
+        let tags = vec![
+            (0, "i1".to_string()),
+            (6, "i0".to_string()),
+        ];
+        
+        let (opening, closing, inline) = categorize_tags(tags);
+        
+        assert_eq!(opening.len(), 1);
+        assert_eq!(closing.len(), 1);
+        assert!(inline.is_empty());
+    }
+
+    #[test]
+    fn test_categorize_tags_inline() {
+        let tags = vec![
+            (0, "i1".to_string()),
+            (6, "b1".to_string()),
+        ];
+        
+        let (opening, closing, inline) = categorize_tags(tags);
+        
+        assert_eq!(opening.len(), 1);
+        assert!(closing.is_empty());
+        assert_eq!(inline.len(), 1);
+    }
+
+    #[test]
+    fn test_categorize_tags_reset_tag() {
+        let tags = vec![
+            (0, "r".to_string()),
+        ];
+        
+        let (opening, closing, inline) = categorize_tags(tags);
+        
+        assert!(opening.is_empty());
+        assert_eq!(closing.len(), 1);
+    }
+
+    #[test]
+    fn test_categorize_tags_explicit_close() {
+        let tags = vec![
+            (0, "/i".to_string()),
+        ];
+        
+        let (opening, closing, inline) = categorize_tags(tags);
+        
+        assert!(opening.is_empty());
+        assert_eq!(closing.len(), 1);
+    }
+
+    #[test]
+    fn test_filter_tags_preserve_basic() {
+        let tags = vec![
+            (0, "i1".to_string()),
+            (0, "pos(100,100)".to_string()),
+        ];
+        
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            preserve_positioning: false,
+            ..Default::default()
+        };
+        
+        let filtered = filter_tags(tags, &config);
+        
+        assert_eq!(filtered.len(), 1);
+        assert!(filtered[0].1.contains("i1"));
+    }
+
+    #[test]
+    fn test_filter_tags_custom_remove() {
+        let tags = vec![
+            (0, "\\an8".to_string()),
+        ];
+        
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            tags_to_remove: vec!["\\an".to_string()],
+            ..Default::default()
+        };
+        
+        let filtered = filter_tags(tags, &config);
+        
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
+    fn test_reapply_tags_converts_newlines_to_backslash_n() {
+        let config = TextCleanerConfig::default();
+        
+        let mapping = TextMapping {
+            entry_index: 1,
+            original_text: r"{\i1}Test{\i0}".to_string(),
+            clean_text: "Test".to_string(),
+            opening_tags: vec![r"{\i1}".to_string()],
+            closing_tags: vec![r"{\i0}".to_string()],
+            inline_tags: HashMap::new(),
+            style: None,
+            should_skip_translation: false,
+        };
+        
+        let result = reapply_tags("Line1\nLine2", &mapping, &config);
+        
+        assert!(result.contains(r"\N"));
+    }
+
+    #[test]
+    fn test_reapply_tags_preserves_basic_when_no_tags_in_result() {
+        let config = TextCleanerConfig {
+            enabled: true,
+            preserve_basic_formatting: true,
+            ..Default::default()
+        };
+        
+        let mapping = clean_text_for_translation(
+            r"{\i1}Hello World{\i0}",
+            None,
+            1,
+            &config,
+        );
+        
+        let result = reapply_tags("Translated", &mapping, &config);
+        
+        assert!(result.contains("{\\i1}"));
+        assert!(result.contains("Translated"));
+    }
+
+    #[test]
+    fn test_ass_clutter_analysis_estimate() {
+        let entries = vec![
+            (r"{\pos(100,200)}Text".to_string(), None),
+            (r"{\blur1}Text".to_string(), None),
+        ];
+        
+        let analysis = analyze_ass_clutter(&entries);
+        
+        assert!(analysis.estimated_tokens_saved > 0);
     }
 }
