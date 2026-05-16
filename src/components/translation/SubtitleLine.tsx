@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Check } from '@phosphor-icons/react';
 import { Textarea } from '@/components/ui/textarea';
 import { SubtitleEntry } from '../../types';
-import { stripAssTags } from '../../utils/format';
+import { stripSubtitleTags } from '../../utils/format';
 
 interface Props {
   index: number;
@@ -37,7 +37,7 @@ function SubtitleLineBase({ index, original, translated, onTranslationChange }: 
           </span>
         </div>
         <p className="text-sm text-foreground leading-relaxed break-words">
-          {stripAssTags(original.text)}
+          {stripSubtitleTags(original.text)}
         </p>
       </div>
 
