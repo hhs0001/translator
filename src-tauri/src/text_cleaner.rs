@@ -98,7 +98,7 @@ fn extract_tags(text: &str) -> (String, Vec<(usize, String)>) {
     for cap in TAGS_REGEX.captures_iter(text) {
         let mat = cap.get(0).unwrap();
         let tag_content = cap.get(1).unwrap().as_str();
-        
+
         // Adiciona texto antes da tag
         let before_tag = &text[last_end..mat.start()];
         clean_text.push_str(before_tag);
