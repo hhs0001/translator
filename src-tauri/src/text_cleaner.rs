@@ -78,11 +78,10 @@ static BASIC_FORMATTING_TAGS: &[&str] = &["b", "i", "u", "s", "strike"];
 
 // Tags de efeito visual (sempre removidas se não preservar positioning)
 static VISUAL_EFFECT_TAGS: &[&str] = &[
-    "pos", "move", "org", "fad", "fade", "t", "frx", "fry", "frz",
-    "fscx", "fscy", "fax", "fay", "blur", "be", "c", "1c", "2c", "3c", "4c",
-    "alpha", "1a", "2a", "3a", "4a", "an", "a", "fn", "fs", "fsp", "fsc",
-    "clip", "iclip", "p", "pbo", "bord", "shad", "xbord", "ybord", "xshad", "yshad",
-    "jitter", "kt", "ktl", "ktr",
+    "pos", "move", "org", "fad", "fade", "t", "frx", "fry", "frz", "fscx", "fscy", "fax", "fay",
+    "blur", "be", "c", "1c", "2c", "3c", "4c", "alpha", "1a", "2a", "3a", "4a", "an", "a", "fn",
+    "fs", "fsp", "fsc", "clip", "iclip", "p", "pbo", "bord", "shad", "xbord", "ybord", "xshad",
+    "yshad", "jitter", "kt", "ktl", "ktr",
 ];
 
 // Tags de karaoke/timing
@@ -98,38 +97,40 @@ fn extract_tags(text: &str) -> (String, Vec<(usize, String)>) {
     for cap in TAGS_REGEX.captures_iter(text) {
         let mat = cap.get(0).unwrap();
         let tag_content = cap.get(1).unwrap().as_str();
-        
+
         // Adiciona texto antes da tag
         let before_tag = &text[last_end..mat.start()];
         clean_text.push_str(before_tag);
         offset += before_tag.len();
-        
+
         // Armazena a tag com sua posição
         tags.push((offset, tag_content.to_string()));
-        
+
         last_end = mat.end();
     }
-    
+
     // Adiciona resto do texto
     clean_text.push_str(&text[last_end..]);
-    
+
     // Converte \N e \n para espaços ou mantém como quebras
     clean_text = clean_text.replace("\\N", "\n").replace("\\n", "\n");
     // Remove \\h (hard space)
     clean_text = clean_text.replace("\\h", " ");
-    
+
     (clean_text, tags)
 }
 
 /// Analisa tags e separa em categorias
-fn categorize_tags(tags: Vec<(usize, String)>) -> (Vec<String>, Vec<String>, HashMap<usize, Vec<String>>) {
+fn categorize_tags(
+    tags: Vec<(usize, String)>,
+) -> (Vec<String>, Vec<String>, HashMap<usize, Vec<String>>) {
     let mut opening = Vec::new();
     let mut closing = Vec::new();
     let mut inline: HashMap<usize, Vec<String>> = HashMap::new();
-    
+
     for (pos, tag_content) in tags {
         // Verifica se é tag de fechamento (reset)
-        if tag_content.starts_with("r") || tag_content == "0" {
+        if tag_content.starts_with('r') || tag_content == "0" {
             closing.push(format!("{{{}}}", tag_content));
         } else if tag_content.starts_with('/') {
             // Tag de fechamento explícito
@@ -143,30 +144,27 @@ fn categorize_tags(tags: Vec<(usize, String)>) -> (Vec<String>, Vec<String>, Has
             }
         }
     }
-    
+
     (opening, closing, inline)
 }
 
 /// Filtra tags baseado na configuração
-fn filter_tags(
-    tags: Vec<(usize, String)>, 
-    config: &TextCleanerConfig
-) -> Vec<(usize, String)> {
+fn filter_tags(tags: Vec<(usize, String)>, config: &TextCleanerConfig) -> Vec<(usize, String)> {
     let mut result = Vec::new();
-    
+
     for (pos, tag_content) in tags {
         let parts: Vec<&str> = tag_content.split(|c| c == '\\' || c == '(').collect();
-        
+
         let mut should_keep = false;
         let mut _is_visual_effect = false;
         let mut _is_karaoke = false;
-        
+
         for part in parts {
             let trimmed = part.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            
+
             // Verifica se é tag básica
             if config.preserve_basic_formatting {
                 for basic_tag in BASIC_FORMATTING_TAGS {
@@ -176,7 +174,7 @@ fn filter_tags(
                     }
                 }
             }
-            
+
             // Verifica se é karaoke
             for karaoke_tag in KARAOKE_TAGS {
                 if trimmed.starts_with(karaoke_tag) {
@@ -187,19 +185,20 @@ fn filter_tags(
                     break;
                 }
             }
-            
+
             // Verifica se é efeito visual
             for visual_tag in VISUAL_EFFECT_TAGS {
                 if trimmed.starts_with(visual_tag) {
                     _is_visual_effect = true;
-                    if config.preserve_positioning && 
-                       (*visual_tag == "pos" || *visual_tag == "move" || *visual_tag == "org") {
+                    if config.preserve_positioning
+                        && (*visual_tag == "pos" || *visual_tag == "move" || *visual_tag == "org")
+                    {
                         should_keep = true;
                     }
                     break;
                 }
             }
-            
+
             // Verifica tags customizadas a remover
             for custom_remove in &config.tags_to_remove {
                 if trimmed.starts_with(custom_remove) {
@@ -208,13 +207,13 @@ fn filter_tags(
                 }
             }
         }
-        
+
         // Mantém se é básica, ou se é posicionamento preservado
         if should_keep {
             result.push((pos, tag_content));
         }
     }
-    
+
     result
 }
 
@@ -226,12 +225,12 @@ pub fn clean_text_for_translation(
     config: &TextCleanerConfig,
 ) -> TextMapping {
     // Verifica se o estilo deve ser ignorado
-    let should_skip = style.map(|s| {
-        config.ignored_styles.iter().any(|ignored| 
-            s.to_lowercase().contains(&ignored.to_lowercase())
-        )
-    }).unwrap_or(false);
-    
+    let should_skip = style
+        .map(|s| {
+            config.ignored_styles.iter().any(|ignored| s.to_lowercase().contains(&ignored.to_lowercase()))
+        })
+        .unwrap_or(false);
+
     if !config.enabled || should_skip {
         // Retorna mapeamento sem limpeza
         return TextMapping {
@@ -245,16 +244,16 @@ pub fn clean_text_for_translation(
             should_skip_translation: should_skip,
         };
     }
-    
+
     // Extrai tags
     let (clean_text, tags) = extract_tags(text);
-    
+
     // Filtra tags
     let filtered_tags = filter_tags(tags, config);
-    
+
     // Categoriza tags
     let (opening, closing, inline) = categorize_tags(filtered_tags);
-    
+
     TextMapping {
         entry_index,
         original_text: text.to_string(),
@@ -274,17 +273,17 @@ pub fn clean_subtitle_entries(
 ) -> CleanedSubtitle {
     let mut mappings = Vec::new();
     let mut texts_to_translate = Vec::new();
-    
+
     for (index, text, style) in entries {
         let mapping = clean_text_for_translation(text, style.as_deref(), *index, config);
-        
+
         if !mapping.should_skip_translation {
             texts_to_translate.push((*index, mapping.clean_text.clone()));
         }
-        
+
         mappings.push(mapping);
     }
-    
+
     CleanedSubtitle {
         mappings,
         texts_to_translate,
