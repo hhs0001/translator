@@ -289,9 +289,7 @@ mod tests {
             headers: None,
         };
 
-        let translations = vec![
-            (2, "Translated 2".to_string()),
-        ];
+        let translations = vec![(2, "Translated 2".to_string())];
 
         file.apply_translations(translations);
 
@@ -354,9 +352,13 @@ Dialogue: 0,0:00:01.00,0:00:04.00,Default,,0000,0000,0000,,Hello ASS
     fn test_serialize_vtt_not_implemented() {
         let file = SubtitleFile {
             format: SubtitleFormat::Vtt,
-            entries: vec![
-                SubtitleEntry { index: 1, start_time: "00:00:01.000".to_string(), end_time: "00:00:04.000".to_string(), text: "Hello".to_string(), metadata: None },
-            ],
+            entries: vec![SubtitleEntry {
+                index: 1,
+                start_time: "00:00:01.000".to_string(),
+                end_time: "00:00:04.000".to_string(),
+                text: "Hello".to_string(),
+                metadata: None,
+            }],
             headers: None,
         };
         let result = file.serialize();
