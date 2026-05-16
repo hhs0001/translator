@@ -3,7 +3,10 @@ use std::path::Path;
 use std::process::Command;
 
 #[cfg(windows)]
-use std::os::windows::process::CommandExt;
+use std::os::windows::process::{CommandExt, ExitStatusExt};
+
+#[cfg(unix)]
+use std::os::unix::process::ExitStatusExt;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -235,12 +238,14 @@ pub fn mux_subtitle_track(
 
     if let Some(lang) = language {
         args.push("-metadata:s:s:0");
-        args.push(&format!("language={}", lang));
+        let lang_arg = format!("language={}", lang);
+        args.push(&lang_arg);
     }
 
     if let Some(t) = title {
         args.push("-metadata:s:s:0");
-        args.push(&format!("title={}", t));
+        let title_arg = format!("title={}", t);
+        args.push(&title_arg);
     }
 
     args.push(output_path);
