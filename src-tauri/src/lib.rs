@@ -15,7 +15,6 @@ use ffmpeg::SubtitleTrack;
 use serde::{Deserialize, Serialize};
 use subtitle::{SubtitleFile, SubtitleFormat};
 use tauri::{Emitter, Manager};
-
 use text_cleaner::{clean_subtitle_entries, reapply_all_tags, TextCleanerConfig};
 use translator::{
     ApiFormat, BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
