@@ -78,6 +78,11 @@ fn run_command(program: &str, args: &[&str]) -> Result<CommandOutput, String> {
     COMMAND_RUNNER.read().unwrap().run(program, args)
 }
 
+fn run_command_strs(program: &str, args: &[String]) -> Result<CommandOutput, String> {
+    let args_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+    run_command(program, &args_refs)
+}
+
 /// Cria um Command que não abre janela de terminal no Windows
 fn create_command(program: &str) -> Command {
     #[allow(unused_mut)]
@@ -210,47 +215,45 @@ pub fn mux_subtitle_track(
     language: Option<&str>,
     title: Option<&str>,
 ) -> Result<(), String> {
-    let mut args: Vec<&str> = vec![
-        "-y",
-        "-i",
-        video_path,
-        "-i",
-        subtitle_path,
-        "-map",
-        "0:v",
-        "-map",
-        "0:a?",
-        "-map",
-        "1:s",
-        "-map",
-        "0:s?",
-        "-c:v",
-        "copy",
-        "-c:a",
-        "copy",
-        "-c:s:0",
-        "ass",
-        "-c:s",
-        "copy",
-        "-disposition:s:0",
-        "default",
+    let mut args: Vec<String> = vec![
+        "-y".to_string(),
+        "-i".to_string(),
+        video_path.to_string(),
+        "-i".to_string(),
+        subtitle_path.to_string(),
+        "-map".to_string(),
+        "0:v".to_string(),
+        "-map".to_string(),
+        "0:a?".to_string(),
+        "-map".to_string(),
+        "1:s".to_string(),
+        "-map".to_string(),
+        "0:s?".to_string(),
+        "-c:v".to_string(),
+        "copy".to_string(),
+        "-c:a".to_string(),
+        "copy".to_string(),
+        "-c:s:0".to_string(),
+        "ass".to_string(),
+        "-c:s".to_string(),
+        "copy".to_string(),
+        "-disposition:s:0".to_string(),
+        "default".to_string(),
     ];
 
     if let Some(lang) = language {
-        args.push("-metadata:s:s:0");
-        let lang_arg = format!("language={}", lang);
-        args.push(&lang_arg);
+        args.push("-metadata:s:s:0".to_string());
+        args.push(format!("language={}", lang));
     }
 
     if let Some(t) = title {
-        args.push("-metadata:s:s:0");
-        let title_arg = format!("title={}", t);
-        args.push(&title_arg);
+        args.push("-metadata:s:s:0".to_string());
+        args.push(format!("title={}", t));
     }
 
-    args.push(output_path);
+    args.push(output_path.to_string());
 
-    let output = run_command("ffmpeg", &args)?;
+    let output = run_command_strs("ffmpeg", &args)?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
