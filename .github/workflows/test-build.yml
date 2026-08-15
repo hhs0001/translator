@@ -1,4 +1,4 @@
-name: "Test Build"
+name: Test Build
 
 on:
   pull_request:
@@ -6,55 +6,39 @@ on:
       - main
       - master
       - release
+  push:
+    branches:
+      - main
+      - master
 
-# This workflow will build your tauri app without uploading it anywhere.
-# It validates that the code compiles correctly on all supported platforms.
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  test-tauri:
+  test-build:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: "macos-latest"
-            args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest"
-            args: "--target x86_64-apple-darwin"
-          - platform: "ubuntu-22.04"
-            args: ""
-          - platform: "windows-latest"
-            args: ""
-
-    runs-on: ${{ matrix.platform }}
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-
-      - name: Install bun
-        uses: oven-sh/setup-bun@v2
+      - name: Install GPUI Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxkbcommon-dev libwayland-dev libvulkan-dev \
+            libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+            libssl-dev cmake pkg-config libfontconfig-dev
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: Install dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Run tests
+        run: cargo test
 
-      - name: Install frontend dependencies
-        run: bun install
-
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0.6.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: ${{ matrix.args }}
+      - name: Release build
+        run: cargo build --release

@@ -1,8 +1,8 @@
-# Translator (Tauri + React)
+# Translator (GPUI)
 
 [English](README.md) | Português (Brasil)
 
-Translator é um app desktop para traduzir arquivos de legenda (e legendas embutidas em vídeos) usando APIs de LLM. Ele foi feito com Tauri, React e Vite, e foca em fluxos rápidos de tradução em lote com edição final e opções flexíveis de saída.
+Translator é um app desktop para traduzir arquivos de legenda (e legendas embutidas em vídeos) usando APIs de LLM. É um app nativo em Rust feito com [GPUI](https://gpui.rs) e [gpui-component](https://longbridge.github.io/gpui-component/), e foca em fluxos rápidos de tradução em lote com edição final e opções flexíveis de saída.
 
 ## Recursos
 
@@ -18,7 +18,7 @@ Translator é um app desktop para traduzir arquivos de legenda (e legendas embut
 ## Formatos suportados
 
 - Legendas: SRT, ASS, SSA (VTT em breve).
-- Vídeos: MKV, MP4, AVI (extração de legendas via FFmpeg).
+- Vídeos: MKV, MP4, AVI, MOV, WEBM, M4V, TS (extração de legendas via FFmpeg).
 
 ## Download
 
@@ -26,52 +26,65 @@ Binários pré-compilados para todas as plataformas estão disponíveis na pági
 
 ### Plataformas suportadas
 
-| Plataforma | Arquitetura           | Arquivo           |
-| ---------- | --------------------- | ----------------- |
-| Windows    | x64                   | instalador `.exe` |
-| macOS      | ARM64 (Apple Silicon) | `.app`            |
-| macOS      | x64 (Intel)           | `.app`            |
-| Linux      | AMD64                 | `.deb`            |
+| Plataforma | Arquitetura           | Arquivo     |
+| ---------- | --------------------- | ----------- |
+| Windows    | x64                   | `.exe`      |
+| macOS      | ARM64 (Apple Silicon) | binário     |
+| macOS      | x64 (Intel)           | binário     |
+| Linux      | AMD64                 | binário     |
 
 ## Requisitos (para desenvolvimento)
 
-- **Bun** (recomendado) ou outro gerenciador Node.js.
-- **Rust + Tauri CLI** para builds desktop.
-- **FFmpeg** para extrair/muxar legendas de vídeo.
+- **Rust** 1.85+ (stable).
+- **FFmpeg** no `PATH` para extrair/muxar legendas de vídeo.
 - Um endpoint de API LLM (compatível com OpenAI ou Anthropic).
+
+No Linux também são necessárias as bibliotecas de sistema do GPUI, em geral:
+
+```bash
+sudo apt-get install -y \
+  libxkbcommon-dev libwayland-dev libvulkan-dev \
+  libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev \
+  libssl-dev cmake pkg-config libfontconfig-dev
+```
 
 ## Desenvolvimento
 
 ```bash
-bun install
-bun run dev
-```
-
-## Rodar o app desktop (Tauri)
-
-```bash
-bun run tauri dev
+cargo run
 ```
 
 ## Build
 
 ```bash
-bun run tauri build
+cargo build --release
+```
+
+O binário fica em `target/release/translator` (ou `translator.exe` no Windows).
+
+## Testes
+
+```bash
+cargo test
 ```
 
 ## Estrutura do projeto
 
 ```
-src/           # UI em React (configurações, tradução, editor)
-src-tauri/     # Backend Tauri (FFmpeg, parser de legenda, chamadas LLM)
+src/main.rs      # entrada GPUI
+src/app.rs       # RootView (navbar + páginas)
+src/core/        # lógica (legenda, FFmpeg, LLM, settings)
+src/state/       # entities GPUI (fila, settings, logs)
+src/views/       # páginas da UI
+assets/i18n/     # strings en / pt-BR
 ```
 
 ## CI/CD
 
 Este projeto usa GitHub Actions para builds e releases automatizados:
 
-- **Lint & Type Check**: Executado em todo PR para validar qualidade do código
-- **Test Build**: Compila o app para todas as plataformas sem fazer release
-- **Release**: Cria automaticamente releases com binários para todas as plataformas
+- **Lint**: `cargo fmt` e `cargo clippy` no Ubuntu e no Windows
+- **Test Build**: `cargo test` e `cargo build --release` no macOS, Ubuntu e Windows
+- **Release**: binários cargo para todas as plataformas
 
-Para criar uma nova release, atualize a versão no `package.json` e faça merge para a branch `release`.
+Para criar uma nova release, atualize a versão no `Cargo.toml` e faça merge para a branch `release`.

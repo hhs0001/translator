@@ -1,67 +1,50 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents when working with code in this repository.
 
 ## Project Overview
 
-Subtitle translation desktop application built with Tauri 2 (Rust backend) and React 19 (TypeScript frontend). Translates subtitle files (SRT/ASS) using LLM APIs, with FFmpeg integration for video subtitle extraction and muxing.
+Subtitle translation desktop application built with **GPUI** (Rust UI) and **gpui-component**. Translates subtitle files (SRT/ASS) using LLM APIs, with FFmpeg integration for video subtitle extraction and muxing.
+
+There is no Tauri, React, Vite, or Bun. The UI and business logic are a single Rust binary.
 
 ## Development Commands
 
 ```bash
-# Development (starts Vite dev server + Tauri with hot reload)
-bun run tauri dev
+# Run the desktop app
+cargo run
 
-# Production build
-bun run build && bun run tauri build
+# Unit tests (core modules)
+cargo test
 
-# TypeScript check only
-bun run build
+# Release build
+cargo build --release
 
-# Preview production frontend
-bun run preview
+# Format / lint
+cargo fmt
+cargo clippy
 ```
 
-Package manager is **Bun** (not npm/yarn).
+FFmpeg must be on `PATH` for video extract/mux. An LLM API endpoint (OpenAI-compatible or Anthropic) is required for translation.
 
 ## Architecture
 
-### IPC-Based Client-Server Pattern
-
 ```
-React Frontend (Webview)          Rust Backend (Native)
-├── UI State (Zustand stores)     ├── Subtitle parsing (SRT/ASS)
-├── Component tree                ├── FFmpeg integration
-├── Tauri IPC calls ──────────────├── LLM API client
-└── Event listeners ◄─────────────└── File I/O, settings persistence
+GPUI App (src/main.rs)
+├── RootView (src/app.rs)          # navbar + page switcher
+├── views/                         # Translation / Settings / editor / queue
+├── state/                         # GPUI Entities (queue, settings, logs)
+└── core/                          # business logic (NO gpui)
+    ├── subtitle/                  # SRT/ASS parsers
+    ├── translator.rs              # LLM client + batching
+    ├── ffmpeg.rs                  # extract / mux / track list
+    ├── settings.rs / templates.rs # JSON persistence
+    └── files.rs / paths.rs        # file helpers + app data dir
 ```
 
-### Frontend Structure (`src/`)
+`src/core` must stay free of GPUI so tests can run with `cargo test`. HTTP work uses a process-wide Tokio runtime (`src/core/runtime.rs`); do not block the GPUI UI thread.
 
-- **`stores/`** - Zustand stores: `translationStore` (file queue, orchestration), `settingsStore` (app config, templates), `logsStore` (log messages)
-- **`components/translation/`** - Translation workflow UI (FileDropZone, FileQueue, SubtitleEditor)
-- **`components/config/`** - Settings pages (API, FFmpeg, prompts, templates)
-- **`utils/tauri.ts`** - Wrapper functions for Tauri IPC commands
-- **`types/index.ts`** - All shared TypeScript interfaces
-
-### Backend Structure (`src-tauri/src/`)
-
-- **`lib.rs`** - Main entry point with 30+ Tauri commands exported via `#[tauri::command]`
-- **`translator.rs`** - LLM client, batch translation logic, language detection
-- **`ffmpeg.rs`** - FFmpeg/FFprobe integration (extraction, muxing, track detection)
-- **`subtitle/`** - Format-specific parsers: `srt.rs`, `ass.rs`
-
-### Key Tauri Commands
-
-Subtitle: `load_subtitle`, `save_subtitle`, `detect_subtitle_format`
-FFmpeg: `check_ffmpeg_installed`, `extract_subtitle_track`, `mux_subtitle_to_video`, `list_video_subtitle_tracks`
-Translation: `translate_subtitle_full`, `translate_subtitle_batch`, `continue_translation`, `detect_language`
-Settings: `load_settings`, `save_settings`, `load_templates`, `add_template`, `update_template`, `delete_template`
-
-### Event Communication (Backend → Frontend)
-
-- `translation:progress` - Real-time progress updates during translation
-- `translation:error` - Error events with retry information
+Persistence: `directories::ProjectDirs::from("com", "translator", "translator")` → `data_dir()`, files `settings.json` and `templates.json` (`rename_all = "camelCase"`).
 
 ## Translation Workflow
 
@@ -75,8 +58,7 @@ Settings: `load_settings`, `save_settings`, `load_templates`, `add_template`, `u
 
 ## Tech Stack Notes
 
-- **ShadcnUI** for component library
-- **TailwindCSS 4.1** for styling
-- **Tokio** async runtime in Rust backend
-- **reqwest** for HTTP client (LLM API calls)
+- **GPUI 0.2** + **gpui-component 0.5** for native UI
+- **Tokio** runtime (dedicated thread) for LLM HTTP via **reqwest**
 - **encoding_rs** for character encoding detection
+- **FFmpeg / FFprobe** on PATH for video subtitle tracks
