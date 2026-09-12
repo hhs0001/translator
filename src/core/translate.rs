@@ -6,14 +6,16 @@ use super::cancel::TranslationCancelState;
 use super::subtitle::SubtitleFile;
 use super::text_cleaner::{clean_subtitle_entries, reapply_all_tags, TextCleanerConfig};
 use super::translator::{
-    BatchTranslationResult, LlmClient, LlmConfig, LlmModel, TranslationBatchReport,
-    TranslationProgress, TranslationSettings, TRANSLATION_CANCELLED_ERROR,
+    noop_batch_observer, BatchObserver, BatchTranslationResult, LlmClient, LlmConfig, LlmModel,
+    TranslationBatchReport, TranslationProgress, TranslationSettings, TRANSLATION_CANCELLED_ERROR,
 };
 
 pub struct TranslationCallbacks {
     pub on_progress: Box<dyn Fn(f64, usize, usize) + Send + Sync>,
     pub on_entry: Box<dyn Fn(usize, String) + Send + Sync>,
     pub on_error: Box<dyn Fn(String, usize) + Send + Sync>,
+    /// Per-batch telemetry, so the UI can show one segment per parallel request.
+    pub on_batch: BatchObserver,
 }
 
 impl Default for TranslationCallbacks {
@@ -22,6 +24,7 @@ impl Default for TranslationCallbacks {
             on_progress: Box::new(|_, _, _| {}),
             on_entry: Box::new(|_, _| {}),
             on_error: Box::new(|_, _| {}),
+            on_batch: noop_batch_observer(),
         }
     }
 }
@@ -83,6 +86,7 @@ pub async fn translate_subtitle_batch(
 }
 
 /// Traduz arquivo completo com batching, streaming opcional e auto-continue.
+#[allow(clippy::too_many_arguments)]
 pub async fn translate_subtitle_full(
     config: LlmConfig,
     system_prompt: String,
@@ -100,8 +104,12 @@ pub async fn translate_subtitle_full(
 
     let client = LlmClient::new(config);
 
+    // `None` means the user turned the cleaner off. `TextCleanerConfig::default()`
+    // has `enabled: true`, so it must not be used as the fallback here.
+    let use_cleaner = text_cleaner_config
+        .as_ref()
+        .is_some_and(|config| config.enabled);
     let cleaner_config = text_cleaner_config.unwrap_or_default();
-    let use_cleaner = cleaner_config.enabled;
 
     let (texts_to_translate, cleaned_data, total) = if use_cleaner {
         let entries_with_style: Vec<(usize, String, Option<String>)> = file
@@ -128,7 +136,10 @@ pub async fn translate_subtitle_full(
 
     if settings.streaming {
         let on_entry = Arc::new(callbacks.on_entry);
-        let on_progress = callbacks.on_progress;
+        let on_progress = Arc::new(callbacks.on_progress);
+        // Streaming emits one entry at a time; keep the aggregate progress in
+        // sync so the queue bar advances instead of jumping to 100% at the end.
+        let streamed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
 
         let translations = client
             .translate_subtitles_streaming(
@@ -138,10 +149,20 @@ pub async fn translate_subtitle_full(
                 settings.parallel_requests,
                 settings.max_retries,
                 Some(cancel_handle.flag()),
+                Arc::clone(&callbacks.on_batch),
                 {
                     let on_entry = Arc::clone(&on_entry);
+                    let on_progress = Arc::clone(&on_progress);
+                    let streamed = Arc::clone(&streamed);
                     move |entry| {
                         (on_entry)(entry.index, entry.text);
+                        let done = streamed.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        let percent = if total > 0 {
+                            (done as f64 / total as f64) * 100.0
+                        } else {
+                            0.0
+                        };
+                        (on_progress)(percent.min(100.0), done.min(total), total);
                     }
                 },
             )
@@ -162,6 +183,7 @@ pub async fn translate_subtitle_full(
         };
 
         file.apply_translations(final_translations);
+        normalize_line_breaks(&mut file);
 
         let progress = TranslationProgress {
             total_entries: total,
@@ -186,6 +208,7 @@ pub async fn translate_subtitle_full(
 
     let on_progress = Arc::new(callbacks.on_progress);
     let on_error = Arc::new(callbacks.on_error);
+    let on_entry = Arc::new(callbacks.on_entry);
 
     let TranslationBatchReport {
         translations,
@@ -220,6 +243,15 @@ pub async fn translate_subtitle_full(
                     (on_error)(error.error_message.clone(), 0);
                 }
             },
+            {
+                let on_entry = Arc::clone(&on_entry);
+                move |entries: &[(usize, String)]| {
+                    for (index, text) in entries {
+                        (on_entry)(*index, text.clone());
+                    }
+                }
+            },
+            Arc::clone(&callbacks.on_batch),
         )
         .await?;
 
@@ -236,12 +268,28 @@ pub async fn translate_subtitle_full(
     };
 
     file.apply_translations(final_translations);
+    normalize_line_breaks(&mut file);
 
     Ok(SubtitleTranslationResult {
         file,
         progress,
         error_message,
     })
+}
+
+/// `\N` is an ASS escape, so plain-text formats must carry real line breaks
+/// instead. (The ASS serializer turns newlines back into `\N` on its own.)
+fn normalize_line_breaks(file: &mut SubtitleFile) {
+    use super::subtitle::SubtitleFormat;
+
+    if matches!(file.format, SubtitleFormat::Ass | SubtitleFormat::Ssa) {
+        return;
+    }
+    for entry in &mut file.entries {
+        if entry.text.contains(r"\N") || entry.text.contains(r"\n") {
+            entry.text = entry.text.replace(r"\N", "\n").replace(r"\n", "\n");
+        }
+    }
 }
 
 pub async fn continue_translation(

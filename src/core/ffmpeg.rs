@@ -205,7 +205,18 @@ pub fn check_ffmpeg() -> Result<String, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let version_line = stdout.lines().next().unwrap_or("FFmpeg installed");
-    Ok(version_line.to_string())
+    Ok(short_version(version_line))
+}
+
+/// `ffmpeg version 7.0.2-essentials_build-www.gyan.dev Copyright (c) …`
+/// becomes `7.0.2-essentials_build-www.gyan.dev`.
+fn short_version(banner: &str) -> String {
+    let trimmed = banner.split(" Copyright").next().unwrap_or(banner).trim();
+    trimmed
+        .strip_prefix("ffmpeg version ")
+        .unwrap_or(trimmed)
+        .trim()
+        .to_string()
 }
 
 #[cfg(test)]
@@ -213,12 +224,24 @@ mod tests {
     use super::*;
 
     #[test]
+    fn short_version_keeps_only_the_version() {
+        assert_eq!(
+            short_version(
+                "ffmpeg version 7.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2024 the FFmpeg developers"
+            ),
+            "7.0.2-essentials_build-www.gyan.dev"
+        );
+        assert_eq!(short_version("ffmpeg version n6.1"), "n6.1");
+        assert_eq!(short_version("FFmpeg installed"), "FFmpeg installed");
+    }
+
+    #[test]
     fn test_check_ffmpeg() {
         // Este teste só passa se FFmpeg estiver instalado
         match check_ffmpeg() {
             Ok(version) => {
                 println!("FFmpeg version: {}", version);
-                assert!(version.contains("ffmpeg"));
+                assert!(!version.is_empty());
             }
             Err(e) => {
                 println!("FFmpeg not installed: {}", e);

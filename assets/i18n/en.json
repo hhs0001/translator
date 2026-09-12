@@ -27,7 +27,8 @@
     "translate": "Translate",
     "pause": "Pause",
     "resume": "Resume",
-    "inQueue": "in queue"
+    "inQueue": "in queue",
+    "toggleTheme": "Toggle theme"
   },
   "logs": {
     "title": "Logs",
@@ -40,7 +41,9 @@
     },
     "empty": "No logs found",
     "showMore": "Show more ({{count}})",
-    "showLess": "Show less"
+    "showLess": "Show less",
+    "copy": "Copy logs",
+    "close": "Close panel"
   },
   "translation": {
     "title": "Translation",
@@ -58,7 +61,13 @@
       "applyTrackAll": "Apply track to all",
       "trackForAll": "Track {{index}} for all",
       "cancelFile": "Cancel translation",
-      "cancelAll": "Cancel all"
+      "cancelAll": "Cancel all",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "retry": "Try again",
+      "revealOutput": "Show in folder",
+      "emptyTitle": "No files in the queue",
+      "emptyHint": "Drop subtitle or video files above to get started."
     },
     "status": {
       "pending": "Pending",
@@ -82,7 +91,16 @@
       "original": "Original",
       "translated": "Translation",
       "lines": "lines",
-      "empty": "Select a file to view and edit subtitles"
+      "empty": "Select a file to view and edit subtitles",
+      "rawTags": "Raw tags",
+      "cleanText": "Clean text",
+      "search": "Search lines…",
+      "unsaved": "Unsaved edits",
+      "follow": "Follow the current line",
+      "save": "Save translated file",
+      "waiting": "Waiting for translation…",
+      "noMatches": "No lines match your search",
+      "emptyHint": "Pick a file from the queue to see the original and the translation side by side."
     },
     "mode": {
       "single": "Single",
@@ -114,7 +132,9 @@
       "languageDetectionModelHint": "Lightweight model to detect translation language for mux (e.g., gemma-3-1b)",
       "none": "None (use manual configuration)",
       "advancedHeaders": "Advanced Headers",
-      "addHeader": "+ Add Header"
+      "addHeader": "+ Add Header",
+      "modelsFound": "{{count}} model(s) loaded",
+      "savedModel": "saved in settings"
     },
     "ffmpeg": {
       "title": "FFmpeg",
@@ -125,7 +145,8 @@
       "notFoundTitle": "FFmpeg not found",
       "notFoundDescription": "FFmpeg is required to extract subtitles from videos. Install it and add it to the system PATH.",
       "formatsHint": "ASS/SSA better preserve styles and formatting",
-      "comingSoon": "coming soon"
+      "comingSoon": "coming soon",
+      "description": "Required to read subtitle tracks from videos and to mux them back in."
     },
     "prompt": {
       "title": "Translation Prompt",
@@ -221,6 +242,9 @@
       "whatItDoes": "What does this do?",
       "whatItDoesDescription": "Anime subtitles often contain complex visual effects (positioning, karaoke, colors, rotations) that pollute the text sent to the AI. The Text Cleaner extracts only the pure text for translation and re-applies the effects afterwards.",
       "tokenSavings": "This saves tokens and prevents the AI from trying to translate effect codes."
+    },
+    "appearance": {
+      "darkMode": "Dark mode"
     }
   },
   "logMessages": {
@@ -247,5 +271,10 @@
     "fileProcessed": "{{fileName}} processed successfully!",
     "errorProcessing": "Error processing {{fileName}}: {{error}}",
     "errorInFile": "Error in {{fileName}} (attempt {{attempt}}): {{error}}"
+  },
+  "notifications": {
+    "fileCompleted": "{{fileName}} translated",
+    "fileFailed": "{{fileName}} failed",
+    "allDone": "{{count}} file(s) translated"
   }
 }

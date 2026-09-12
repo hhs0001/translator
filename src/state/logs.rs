@@ -121,6 +121,35 @@ impl LogsState {
         cx.notify();
     }
 
+    pub fn count_of(&self, level: LogLevel) -> usize {
+        self.entries.iter().filter(|e| e.level == level).count()
+    }
+
+    /// Every entry as plain text, for the clipboard.
+    pub fn as_text(&self) -> String {
+        self.entries
+            .iter()
+            .map(|entry| {
+                let level = match entry.level {
+                    LogLevel::Info => "INFO",
+                    LogLevel::Warning => "WARN",
+                    LogLevel::Error => "ERROR",
+                    LogLevel::Success => "OK",
+                };
+                match &entry.file {
+                    Some(file) => {
+                        format!(
+                            "[{}] {level} ({file}) {}",
+                            entry.timestamp_label, entry.message
+                        )
+                    }
+                    None => format!("[{}] {level} {}", entry.timestamp_label, entry.message),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     pub fn error_count(&self) -> usize {
         self.entries
             .iter()
@@ -146,14 +175,7 @@ impl LogsState {
     }
 }
 
+/// Local wall-clock time, `HH:MM:SS`.
 fn chrono_like_time() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let s = secs % 60;
-    let m = (secs / 60) % 60;
-    let h = (secs / 3600) % 24;
-    format!("{h:02}:{m:02}:{s:02}")
+    chrono::Local::now().format("%H:%M:%S").to_string()
 }

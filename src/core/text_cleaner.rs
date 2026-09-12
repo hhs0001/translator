@@ -72,6 +72,7 @@ pub struct CleanedSubtitle {
 
 // Regex para extrair tags ASS
 static TAGS_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{([^}]*)\}").unwrap());
+static HTML_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"</?[^>]+>").unwrap());
 
 // Tags de formatação básica
 static BASIC_FORMATTING_TAGS: &[&str] = &["b", "i", "u", "s", "strike"];
@@ -120,6 +121,36 @@ fn extract_tags(text: &str) -> (String, Vec<(usize, String)>) {
     (clean_text, tags)
 }
 
+/// Texto legível para a UI: remove overrides ASS, tags HTML e converte `\N`.
+pub fn display_text(text: &str) -> String {
+    let (clean, _) = extract_tags(text);
+    let without_html = HTML_REGEX.replace_all(&clean, "");
+    let lines: Vec<&str> = without_html
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if lines.is_empty() {
+        "—".to_string()
+    } else {
+        lines.join("\n")
+    }
+}
+
+/// Compacta timecodes (`0:01:16.43` → `01:16.43`).
+pub fn format_timecode(ts: &str) -> String {
+    let normalized = ts.replace(',', ".");
+    let stripped = normalized
+        .strip_prefix("0:")
+        .or_else(|| normalized.strip_prefix("00:"))
+        .unwrap_or(&normalized);
+    stripped.trim().to_string()
+}
+
+pub fn format_range(start: &str, end: &str) -> String {
+    format!("{}  –  {}", format_timecode(start), format_timecode(end))
+}
+
 /// Analisa tags e separa em categorias
 fn categorize_tags(
     tags: Vec<(usize, String)>,
@@ -156,7 +187,7 @@ fn filter_tags(tags: Vec<(usize, String)>, config: &TextCleanerConfig) -> Vec<(u
     let mut result = Vec::new();
 
     for (pos, tag_content) in tags {
-        let parts: Vec<&str> = tag_content.split(|c| c == '\\' || c == '(').collect();
+        let parts: Vec<&str> = tag_content.split(['\\', '(']).collect();
 
         let mut should_keep = false;
         let mut _is_visual_effect = false;
@@ -579,5 +610,28 @@ mod tests {
         assert!(has_heavy_visual_effects(r"{\pos(100,200)}Hello"));
         assert!(has_heavy_visual_effects(r"{\blur1\frz10}World"));
         assert!(!has_heavy_visual_effects(r"{\i1}Simple{\i0}"));
+    }
+
+    #[test]
+    fn display_text_strips_ass_overrides_and_karaoke_letters() {
+        let raw = r"{\pos(637.87,711.77)\blur1\c&H2A1D15&\frz10.431}T{\frz9.595}A{\frz8.866}K";
+        assert_eq!(display_text(raw), "TAK");
+    }
+
+    #[test]
+    fn display_text_converts_newlines_and_html() {
+        assert_eq!(display_text(r"Hello\NWorld"), "Hello\nWorld");
+        assert_eq!(display_text("<i>Hello</i> <b>there</b>"), "Hello there");
+        assert_eq!(display_text(r"{\an8}"), "—");
+    }
+
+    #[test]
+    fn format_timecode_drops_leading_hours() {
+        assert_eq!(format_timecode("0:01:16.43"), "01:16.43");
+        assert_eq!(format_timecode("00:01:16,430"), "01:16.430");
+        assert_eq!(
+            format_range("0:01:16.43", "0:01:18.10"),
+            "01:16.43  –  01:18.10"
+        );
     }
 }

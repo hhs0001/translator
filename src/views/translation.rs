@@ -1,19 +1,27 @@
 use gpui::prelude::*;
 use gpui::*;
-use gpui_component::tab::{Tab, TabBar};
-use gpui_component::{h_flex, v_flex, ActiveTheme};
+use gpui_component::{h_flex, v_flex, ActiveTheme, Sizable};
 
-use crate::i18n;
+use crate::i18n::{self, Language};
+use crate::icons::Ico;
 use crate::state::queue::QueueState;
 use crate::state::settings::SettingsState;
 use crate::views::dropzone::DropZone;
-use crate::views::editor::{empty_editor, SubtitleEditor};
+use crate::views::editor::SubtitleEditor;
 use crate::views::queue::QueueList;
+use crate::views::ui;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Single,
+    Batch,
+}
 
 pub struct TranslationView {
     queue: Entity<QueueState>,
     settings: Entity<SettingsState>,
-    batch: bool,
+    editor: Entity<SubtitleEditor>,
+    mode: Mode,
     _subs: Vec<Subscription>,
 }
 
@@ -21,98 +29,189 @@ impl TranslationView {
     pub fn new(
         queue: Entity<QueueState>,
         settings: Entity<SettingsState>,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let mut subs = Vec::new();
-        subs.push(cx.observe(&queue, |_, _, cx| cx.notify()));
-        subs.push(cx.observe(&settings, |_, _, cx| cx.notify()));
+        let editor = cx.new(|cx| SubtitleEditor::new(queue.clone(), settings.clone(), window, cx));
+
+        let subs = vec![
+            cx.observe(&queue, |_, _, cx| cx.notify()),
+            cx.observe(&settings, |_, _, cx| cx.notify()),
+        ];
+
         Self {
             queue,
             settings,
-            batch: false,
+            editor,
+            mode: Mode::Single,
             _subs: subs,
         }
+    }
+
+    fn mode_tab(
+        &self,
+        mode: Mode,
+        icon: Ico,
+        label: String,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let active = self.mode == mode;
+        let id = SharedString::from(match mode {
+            Mode::Single => "mode-single",
+            Mode::Batch => "mode-batch",
+        });
+        h_flex()
+            .id(id)
+            .gap_2()
+            .items_center()
+            .px_3()
+            .py(px(6.))
+            .rounded(px(8.))
+            .text_sm()
+            .cursor_pointer()
+            .when(active, |this| {
+                this.bg(cx.theme().background)
+                    .font_weight(FontWeight::MEDIUM)
+                    .text_color(cx.theme().foreground)
+            })
+            .when(!active, |this| {
+                this.text_color(cx.theme().muted_foreground)
+                    .hover(|this| this.text_color(cx.theme().foreground))
+            })
+            .child(icon.icon().small())
+            .child(label)
+            .on_click(cx.listener(move |this, _, _, cx| {
+                this.mode = mode;
+                cx.notify();
+            }))
     }
 }
 
 impl Render for TranslationView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let lang = self.settings.read(cx).language();
+        let lang: Language = self.settings.read(cx).language();
         let has_files = !self.queue.read(cx).files.is_empty();
-        let current = self.queue.read(cx).current_file().cloned();
-        let selected = if self.batch { 1 } else { 0 };
 
         v_flex()
             .size_full()
+            .min_h_0()
             .gap_4()
             .child(
-                v_flex()
-                    .gap_1()
-                    .child(
-                        div()
-                            .text_xl()
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(i18n::t(lang, "translation.title")),
-                    )
-                    .child(
-                        div()
-                            .text_sm()
-                            .text_color(cx.theme().muted_foreground)
-                            .child(i18n::t(lang, "translation.subtitle")),
-                    ),
-            )
-            .child(
-                TabBar::new("translation-mode")
-                    .selected_index(selected)
-                    .child(Tab::new().label(i18n::t(lang, "translation.mode.single")))
-                    .child(Tab::new().label(i18n::t(lang, "translation.mode.batch")))
-                    .on_click(cx.listener(|this, ix, _, cx| {
-                        this.batch = *ix == 1;
-                        cx.notify();
-                    })),
-            )
-            .child(if self.batch {
-                v_flex()
-                    .size_full()
-                    .gap_4()
-                    .child(DropZone::new(self.queue.clone(), self.settings.clone()))
-                    .when(has_files, |this| {
-                        this.child(QueueList::new(
-                            self.queue.clone(),
-                            self.settings.clone(),
-                            false,
-                            true,
-                        ))
-                    })
-                    .into_any_element()
-            } else {
                 h_flex()
-                    .size_full()
+                    .w_full()
                     .gap_4()
-                    .items_start()
+                    .justify_between()
+                    .items_end()
                     .child(
                         v_flex()
-                            .w(relative(0.42))
-                            .gap_4()
-                            .child(DropZone::new(self.queue.clone(), self.settings.clone()))
+                            .gap(px(2.))
+                            .child(
+                                div()
+                                    .text_xl()
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(i18n::t(lang, "translation.title")),
+                            )
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(cx.theme().muted_foreground)
+                                    .child(i18n::t(lang, "translation.subtitle")),
+                            ),
+                    )
+                    .child(
+                        h_flex()
+                            .flex_none()
+                            .gap_1()
+                            .p(px(3.))
+                            .rounded(px(10.))
+                            .bg(cx.theme().muted.opacity(0.55))
+                            .child(self.mode_tab(
+                                Mode::Single,
+                                Ico::FileText,
+                                i18n::t(lang, "translation.mode.single"),
+                                cx,
+                            ))
+                            .child(self.mode_tab(
+                                Mode::Batch,
+                                Ico::Layers,
+                                i18n::t(lang, "translation.mode.batch"),
+                                cx,
+                            )),
+                    ),
+            )
+            .child(match self.mode {
+                Mode::Batch => v_flex()
+                    .size_full()
+                    .min_h_0()
+                    .gap_4()
+                    .child(
+                        DropZone::new(self.queue.clone(), self.settings.clone()).compact(has_files),
+                    )
+                    .child(if has_files {
+                        div()
+                            .id("batch-queue")
+                            .flex_1()
+                            .min_h_0()
+                            .overflow_y_scroll()
+                            .pr_1()
+                            .child(QueueList::new(
+                                self.queue.clone(),
+                                self.settings.clone(),
+                                false,
+                                true,
+                            ))
+                            .into_any_element()
+                    } else {
+                        ui::empty_state(
+                            Ico::Layers,
+                            i18n::t(lang, "translation.queue.emptyTitle"),
+                            Some(i18n::t(lang, "translation.queue.emptyHint")),
+                            cx,
+                        )
+                        .into_any_element()
+                    })
+                    .into_any_element(),
+                Mode::Single => h_flex()
+                    .size_full()
+                    .min_h_0()
+                    .gap_4()
+                    .child(
+                        v_flex()
+                            .w(px(376.))
+                            .flex_none()
+                            .h_full()
+                            .min_h_0()
+                            .gap_3()
+                            .child(
+                                DropZone::new(self.queue.clone(), self.settings.clone())
+                                    .compact(has_files),
+                            )
                             .when(has_files, |this| {
-                                this.child(QueueList::new(
-                                    self.queue.clone(),
-                                    self.settings.clone(),
-                                    true,
-                                    false,
-                                ))
+                                this.child(
+                                    div()
+                                        .id("single-queue")
+                                        .flex_1()
+                                        .min_h_0()
+                                        .overflow_y_scroll()
+                                        .pr_1()
+                                        .child(QueueList::new(
+                                            self.queue.clone(),
+                                            self.settings.clone(),
+                                            true,
+                                            false,
+                                        )),
+                                )
                             }),
                     )
-                    .child(div().flex_1().h_full().child(
-                        if let Some(file) = current.filter(|f| f.original.is_some()) {
-                            SubtitleEditor::new(file, lang).into_any_element()
-                        } else {
-                            empty_editor(lang, cx).into_any_element()
-                        },
-                    ))
-                    .into_any_element()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .min_h_0()
+                            .child(self.editor.clone()),
+                    )
+                    .into_any_element(),
             })
     }
 }

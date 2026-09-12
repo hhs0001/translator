@@ -59,6 +59,27 @@ impl SettingsState {
         self.persist(cx);
     }
 
+    pub fn is_dark(&self) -> bool {
+        self.settings.theme != "light"
+    }
+
+    pub fn set_dark(&mut self, dark: bool, window: &mut gpui::Window, cx: &mut Context<Self>) {
+        self.settings.theme = if dark { "dark" } else { "light" }.to_string();
+        crate::theme::apply(dark, Some(window), cx);
+        self.persist(cx);
+    }
+
+    pub fn set_header_field(&mut self, id: &str, key: bool, value: String, cx: &mut Context<Self>) {
+        if let Some(header) = self.settings.headers.iter_mut().find(|h| h.id == id) {
+            if key {
+                header.key = value;
+            } else {
+                header.value = value;
+            }
+            self.persist(cx);
+        }
+    }
+
     pub fn set_language(&mut self, language: Language, cx: &mut Context<Self>) {
         self.settings.language = language.code().to_string();
         gpui_component::set_locale(language.code());

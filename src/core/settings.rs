@@ -71,6 +71,9 @@ pub struct AppSettings {
     // Interface language
     #[serde(default = "default_language")]
     pub language: String,
+    /// UI theme: `dark` or `light`.
+    #[serde(default = "default_theme")]
+    pub theme: String,
 
     // Text Cleaner (remoção de "lixo" de legendas ASS)
     #[serde(default)]
@@ -119,6 +122,7 @@ impl Default for AppSettings {
             cleanup_extracted_subtitles: false,
             cleanup_mux_artifacts: false,
             language: default_language(),
+            theme: default_theme(),
             text_cleaner_enabled: false,
             text_cleaner_preserve_basic_formatting: true,
             text_cleaner_tags_to_remove: Vec::new(),
@@ -232,6 +236,10 @@ fn default_language() -> String {
     "en".to_string()
 }
 
+fn default_theme() -> String {
+    "dark".to_string()
+}
+
 fn default_text_cleaner_preserve_basic() -> bool {
     true
 }
@@ -258,10 +266,46 @@ pub fn load_from(path: &Path) -> Result<AppSettings, String> {
 
     let content =
         fs::read_to_string(path).map_err(|e| format!("Failed to read settings: {}", e))?;
-    let settings: AppSettings =
-        serde_json::from_str(&content).map_err(|e| format!("Failed to parse settings: {}", e))?;
 
-    Ok(settings)
+    match serde_json::from_str::<AppSettings>(&content) {
+        Ok(settings) => Ok(settings),
+        Err(_) => {
+            // A single odd field (wrong type, `null`, a value from a future
+            // version) must not throw away the whole configuration, so fall
+            // back to importing field by field and keep a copy of the original.
+            let _ = fs::copy(path, path.with_extension("json.bak"));
+            Ok(lenient_parse(&content))
+        }
+    }
+}
+
+/// Reads whatever fields are usable, leaving the rest at their defaults.
+fn lenient_parse(content: &str) -> AppSettings {
+    let Ok(serde_json::Value::Object(incoming)) =
+        serde_json::from_str::<serde_json::Value>(content)
+    else {
+        return AppSettings::default();
+    };
+
+    let mut accepted = match serde_json::to_value(AppSettings::default()) {
+        Ok(serde_json::Value::Object(map)) => map,
+        _ => return AppSettings::default(),
+    };
+
+    for (key, value) in incoming {
+        if !accepted.contains_key(&key) {
+            continue;
+        }
+        let previous = accepted.insert(key.clone(), value);
+        let candidate = serde_json::Value::Object(accepted.clone());
+        if serde_json::from_value::<AppSettings>(candidate).is_err() {
+            if let Some(previous) = previous {
+                accepted.insert(key, previous);
+            }
+        }
+    }
+
+    serde_json::from_value(serde_json::Value::Object(accepted)).unwrap_or_default()
 }
 
 pub fn save_to(path: &Path, settings: &AppSettings) -> Result<(), String> {
@@ -304,10 +348,12 @@ mod tests {
     #[test]
     fn load_save_roundtrip_temp_dir() {
         let path = unique_temp_file("settings.json");
-        let mut settings = AppSettings::default();
-        settings.base_url = "http://example.local/v1".to_string();
-        settings.model = "test-model".to_string();
-        settings.batch_size = 12;
+        let settings = AppSettings {
+            base_url: "http://example.local/v1".to_string(),
+            model: "test-model".to_string(),
+            batch_size: 12,
+            ..AppSettings::default()
+        };
 
         save_to(&path, &settings).unwrap();
         let loaded = load_from(&path).unwrap();
@@ -341,26 +387,106 @@ mod tests {
         // unspecified fields keep defaults
         assert_eq!(settings.max_retries, 3);
         assert_eq!(settings.language, "en");
+        assert_eq!(settings.theme, "dark");
+    }
+
+    #[test]
+    fn legacy_tauri_settings_load_unchanged() {
+        // Shape written by the previous Tauri build (no theme/reasoning keys).
+        let json = r#"{
+            "baseUrl": "https://cli.example.com/v1",
+            "apiKey": "secret",
+            "apiFormat": "auto",
+            "headers": [],
+            "model": "gpt-5.6-sol",
+            "customModel": "",
+            "languageDetectionModel": "gpt-5.6-luna",
+            "prompt": "You are a translator",
+            "selectedTemplateId": "1768245526864-3386da34",
+            "batchSize": 50,
+            "parallelRequests": 3,
+            "autoContinue": true,
+            "continueOnError": true,
+            "maxRetries": 3,
+            "concurrency": 1,
+            "streaming": true,
+            "outputMode": "mux",
+            "muxLanguage": "por",
+            "muxTitle": "Portuguese",
+            "separateOutputDir": "",
+            "cleanupExtractedSubtitles": true,
+            "cleanupMuxArtifacts": true,
+            "language": "en"
+        }"#;
+
+        let settings: AppSettings = serde_json::from_str(json).unwrap();
+        assert_eq!(settings.base_url, "https://cli.example.com/v1");
+        assert_eq!(settings.model, "gpt-5.6-sol");
+        assert_eq!(settings.language_detection_model, "gpt-5.6-luna");
+        assert_eq!(settings.parallel_requests, 3);
+        assert!(settings.streaming);
+        assert_eq!(settings.output_mode, "mux");
+        assert!(settings.cleanup_mux_artifacts);
+        assert_eq!(
+            settings.selected_template_id.as_deref(),
+            Some("1768245526864-3386da34")
+        );
+        // New fields fall back to their defaults.
+        assert_eq!(settings.theme, "dark");
+        assert_eq!(settings.reasoning_effort, ReasoningEffort::Default);
+        assert!(!settings.text_cleaner_enabled);
+    }
+
+    #[test]
+    fn one_broken_field_does_not_discard_the_rest() {
+        let path = unique_temp_file("settings.json");
+        // `maxRetries` as a string and an unknown key from a newer version.
+        fs::write(
+            &path,
+            r#"{
+                "baseUrl": "http://kept",
+                "model": "kept-model",
+                "maxRetries": "three",
+                "somethingNew": {"a": 1}
+            }"#,
+        )
+        .unwrap();
+
+        let settings = load_from(&path).unwrap();
+        assert_eq!(settings.base_url, "http://kept");
+        assert_eq!(settings.model, "kept-model");
+        assert_eq!(
+            settings.max_retries, 3,
+            "broken field falls back to default"
+        );
+        assert!(
+            path.with_extension("json.bak").exists(),
+            "the original file is preserved"
+        );
+
+        let _ = fs::remove_dir_all(path.parent().unwrap());
     }
 
     #[test]
     fn to_llm_config_prefers_custom_model() {
-        let mut settings = AppSettings::default();
-        settings.model = "listed".to_string();
-        settings.custom_model = "custom".to_string();
-        settings.base_url = "http://localhost:8045/v1".to_string();
-        settings.headers = vec![
-            HeaderItem {
-                id: "1".into(),
-                key: "X-Test".into(),
-                value: "yes".into(),
-            },
-            HeaderItem {
-                id: "2".into(),
-                key: String::new(),
-                value: "ignored".into(),
-            },
-        ];
+        let settings = AppSettings {
+            model: "listed".to_string(),
+            custom_model: "custom".to_string(),
+            base_url: "http://localhost:8045/v1".to_string(),
+            headers: vec![
+                HeaderItem {
+                    id: "1".into(),
+                    key: "X-Test".into(),
+                    value: "yes".into(),
+                },
+                HeaderItem {
+                    id: "2".into(),
+                    key: String::new(),
+                    value: "ignored".into(),
+                },
+            ],
+            ..AppSettings::default()
+        };
 
         let config = settings.to_llm_config();
         assert_eq!(config.model, "custom");
@@ -370,10 +496,12 @@ mod tests {
 
     #[test]
     fn text_cleaner_config_maps_fields() {
-        let mut settings = AppSettings::default();
-        settings.text_cleaner_enabled = true;
-        settings.text_cleaner_preserve_basic_formatting = false;
-        settings.text_cleaner_tags_to_remove = vec!["blur".into()];
+        let settings = AppSettings {
+            text_cleaner_enabled: true,
+            text_cleaner_preserve_basic_formatting: false,
+            text_cleaner_tags_to_remove: vec!["blur".into()],
+            ..AppSettings::default()
+        };
         let cfg = settings.text_cleaner_config();
         assert!(cfg.enabled);
         assert!(!cfg.preserve_basic_formatting);

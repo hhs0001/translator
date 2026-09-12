@@ -27,7 +27,8 @@
     "translate": "Traduzir",
     "pause": "Pausar",
     "resume": "Retomar",
-    "inQueue": "na fila"
+    "inQueue": "na fila",
+    "toggleTheme": "Alternar tema"
   },
   "logs": {
     "title": "Logs",
@@ -40,7 +41,9 @@
     },
     "empty": "Nenhum log encontrado",
     "showMore": "Mostrar mais ({{count}})",
-    "showLess": "Mostrar menos"
+    "showLess": "Mostrar menos",
+    "copy": "Copiar logs",
+    "close": "Fechar painel"
   },
   "translation": {
     "title": "Traducao",
@@ -58,7 +61,13 @@
       "applyTrackAll": "Aplicar faixa em todos",
       "trackForAll": "Faixa {{index}} em todos",
       "cancelFile": "Cancelar traducao",
-      "cancelAll": "Cancelar tudo"
+      "cancelAll": "Cancelar tudo",
+      "moveUp": "Mover para cima",
+      "moveDown": "Mover para baixo",
+      "retry": "Tentar de novo",
+      "revealOutput": "Mostrar na pasta",
+      "emptyTitle": "Nenhum arquivo na fila",
+      "emptyHint": "Solte legendas ou vídeos acima para começar."
     },
     "status": {
       "pending": "Pendente",
@@ -82,7 +91,16 @@
       "original": "Original",
       "translated": "Traducao",
       "lines": "linhas",
-      "empty": "Selecione um arquivo para visualizar e editar legendas"
+      "empty": "Selecione um arquivo para visualizar e editar legendas",
+      "rawTags": "Tags brutas",
+      "cleanText": "Texto limpo",
+      "search": "Buscar linhas…",
+      "unsaved": "Edições não salvas",
+      "follow": "Acompanhar a linha atual",
+      "save": "Salvar legenda traduzida",
+      "waiting": "Aguardando tradução…",
+      "noMatches": "Nenhuma linha corresponde à busca",
+      "emptyHint": "Escolha um arquivo da fila para ver o original e a tradução lado a lado."
     },
     "mode": {
       "single": "Single",
@@ -114,7 +132,9 @@
       "languageDetectionModelHint": "Modelo leve para detectar o idioma da traducao e usar no mux (ex: gemma-3-1b)",
       "none": "Nenhum (usar configuracao manual)",
       "advancedHeaders": "Headers Avancados",
-      "addHeader": "+ Adicionar Header"
+      "addHeader": "+ Adicionar Header",
+      "modelsFound": "{{count}} modelo(s) carregado(s)",
+      "savedModel": "salvo nas configurações"
     },
     "ffmpeg": {
       "title": "FFmpeg",
@@ -125,7 +145,8 @@
       "notFoundTitle": "FFmpeg nao encontrado",
       "notFoundDescription": "O FFmpeg e necessario para extrair legendas de videos. Instale-o e adicione ao PATH do sistema.",
       "formatsHint": "ASS/SSA preservam melhor estilos e formatacao",
-      "comingSoon": "em breve"
+      "comingSoon": "em breve",
+      "description": "Necessário para ler faixas de legenda de vídeos e embuti-las de volta."
     },
     "prompt": {
       "title": "Prompt de Traducao",
@@ -221,6 +242,9 @@
       "whatItDoes": "O que isso faz?",
       "whatItDoesDescription": "Legendas de anime frequentemente contem efeitos visuais complexos (posicionamento, karaoke, cores, rotacoes) que poluem o texto enviado a IA. O Text Cleaner extrai apenas o texto puro para traducao e reaplica os efeitos depois.",
       "tokenSavings": "Isso economiza tokens e evita que a IA tente traduzir codigos de efeito."
+    },
+    "appearance": {
+      "darkMode": "Modo escuro"
     }
   },
   "logMessages": {
@@ -247,5 +271,10 @@
     "fileProcessed": "{{fileName}} processado com sucesso!",
     "errorProcessing": "Erro ao processar {{fileName}}: {{error}}",
     "errorInFile": "Erro em {{fileName}} (tentativa {{attempt}}): {{error}}"
+  },
+  "notifications": {
+    "fileCompleted": "{{fileName}} traduzido",
+    "fileFailed": "Falha em {{fileName}}",
+    "allDone": "{{count}} arquivo(s) traduzido(s)"
   }
 }

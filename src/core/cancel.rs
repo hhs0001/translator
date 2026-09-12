@@ -53,6 +53,14 @@ impl TranslationCancelState {
             .map(|flag| flag.load(Ordering::Relaxed))
             .unwrap_or(false)
     }
+
+    /// Forgets a previous cancellation so the file can be translated again.
+    ///
+    /// The flag itself is left untouched: a worker still holding it keeps
+    /// seeing the cancellation it was given.
+    pub fn reset(&self, file_id: &str) {
+        self.flags.lock().unwrap().remove(file_id);
+    }
 }
 
 impl CancelHandle {
@@ -68,7 +76,14 @@ impl CancelHandle {
 impl Drop for CancelHandle {
     fn drop(&mut self) {
         if let Ok(mut flags) = self.flags.lock() {
-            flags.remove(&self.file_id);
+            // Only drop our own flag: a newer run for the same file may have
+            // registered a fresh one in the meantime.
+            let is_ours = flags
+                .get(&self.file_id)
+                .is_some_and(|flag| Arc::ptr_eq(flag, &self.flag));
+            if is_ours {
+                flags.remove(&self.file_id);
+            }
         }
     }
 }
@@ -94,6 +109,32 @@ mod tests {
 
         let handle = state.register("file-2");
         assert!(handle.is_cancelled());
+    }
+
+    #[test]
+    fn reset_allows_a_fresh_run() {
+        let state = TranslationCancelState::default();
+        state.cancel("file-3");
+        state.reset("file-3");
+
+        let handle = state.register("file-3");
+        assert!(!handle.is_cancelled());
+        state.cancel("file-3");
+        assert!(handle.is_cancelled());
+    }
+
+    #[test]
+    fn dropping_a_stale_handle_keeps_the_new_flag() {
+        let state = TranslationCancelState::default();
+        let stale = state.register("file-4");
+        state.cancel("file-4");
+        state.reset("file-4");
+
+        let fresh = state.register("file-4");
+        drop(stale);
+
+        state.cancel("file-4");
+        assert!(fresh.is_cancelled());
     }
 
     #[test]

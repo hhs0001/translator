@@ -1,4 +1,7 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Instant;
 
 use futures::channel::mpsc;
 use futures::StreamExt;
@@ -8,9 +11,9 @@ use uuid::Uuid;
 use crate::core::cancel::TranslationCancelState;
 use crate::core::ffmpeg::{self, SubtitleTrack};
 use crate::core::files::{self, FileInfo};
-use crate::core::subtitle::{SubtitleEntry, SubtitleFile};
+use crate::core::subtitle::{SubtitleEntry, SubtitleFile, SubtitleFormat};
 use crate::core::translate::{self, DetectedLanguage, TranslationCallbacks};
-use crate::core::translator::TRANSLATION_CANCELLED_ERROR;
+use crate::core::translator::{BatchStatus, BatchUpdate, TRANSLATION_CANCELLED_ERROR};
 use crate::i18n::{self, Language};
 use crate::state::logs::{LogLevel, LogsState};
 use crate::state::settings::SettingsState;
@@ -85,6 +88,124 @@ pub struct QueueFile {
     pub detected_language: Option<DetectedLanguage>,
     pub output_subtitle_path: Option<String>,
     pub output_video_path: Option<String>,
+    /// One entry per translation batch, for the segmented progress bar.
+    pub batches: Vec<BatchProgress>,
+    pub started_at: Option<Instant>,
+    pub finished_at: Option<Instant>,
+    /// Set when the user edited a line after the file was written to disk.
+    pub has_unsaved_edits: bool,
+    /// Entry index -> position, so streaming updates are O(1) instead of a scan.
+    entry_slot: HashMap<usize, usize>,
+}
+
+/// Everything the queue list needs to draw a row — deliberately excludes the
+/// parsed subtitle so rendering never clones thousands of entries.
+#[derive(Clone)]
+pub struct FileSummary {
+    pub id: String,
+    pub name: String,
+    pub kind: FileKind,
+    pub status: FileStatus,
+    pub progress: f32,
+    pub total_lines: usize,
+    pub translated_lines: usize,
+    pub error: Option<String>,
+    pub selected_track_index: Option<usize>,
+    pub subtitle_tracks: Vec<SubtitleTrack>,
+    pub is_loading_tracks: bool,
+    pub detected_language: Option<DetectedLanguage>,
+    pub has_output: bool,
+    pub format_label: Option<&'static str>,
+    pub batches: Vec<BatchProgress>,
+    pub elapsed_secs: Option<u64>,
+    pub eta_secs: Option<u64>,
+    pub can_retry: bool,
+    pub has_unsaved_edits: bool,
+}
+
+/// Live state of a single translation batch.
+#[derive(Clone, Copy, Debug)]
+pub struct BatchProgress {
+    pub total: usize,
+    pub done: usize,
+    pub status: BatchStatus,
+}
+
+impl Default for BatchProgress {
+    fn default() -> Self {
+        Self {
+            total: 0,
+            done: 0,
+            status: BatchStatus::Pending,
+        }
+    }
+}
+
+impl QueueFile {
+    pub fn format(&self) -> Option<SubtitleFormat> {
+        self.original.as_ref().map(|s| s.format.clone())
+    }
+
+    pub fn format_label(&self) -> Option<&'static str> {
+        self.format().map(|f| match f {
+            SubtitleFormat::Srt => "SRT",
+            SubtitleFormat::Ass => "ASS",
+            SubtitleFormat::Ssa => "SSA",
+            SubtitleFormat::Vtt => "VTT",
+        })
+    }
+
+    /// Seconds spent translating so far (or in total, once finished).
+    pub fn elapsed_secs(&self) -> Option<u64> {
+        let started = self.started_at?;
+        let end = self.finished_at.unwrap_or_else(Instant::now);
+        Some(end.saturating_duration_since(started).as_secs())
+    }
+
+    /// Rough ETA in seconds, derived from the lines translated so far.
+    pub fn eta_secs(&self) -> Option<u64> {
+        if !self.status.is_processing() || self.translated_lines == 0 {
+            return None;
+        }
+        let elapsed = self.elapsed_secs()? as f64;
+        if elapsed < 2.0 {
+            return None;
+        }
+        let remaining = self.total_lines.saturating_sub(self.translated_lines) as f64;
+        if remaining <= 0.0 {
+            return None;
+        }
+        let per_line = elapsed / self.translated_lines as f64;
+        Some((remaining * per_line).round() as u64)
+    }
+
+    pub fn can_retry(&self) -> bool {
+        matches!(self.status, FileStatus::Error | FileStatus::Cancelled)
+    }
+
+    pub fn summary(&self) -> FileSummary {
+        FileSummary {
+            id: self.id.clone(),
+            name: self.name.clone(),
+            kind: self.kind,
+            status: self.status,
+            progress: self.progress,
+            total_lines: self.total_lines,
+            translated_lines: self.translated_lines,
+            error: self.error.clone(),
+            selected_track_index: self.selected_track_index,
+            subtitle_tracks: self.subtitle_tracks.clone(),
+            is_loading_tracks: self.is_loading_tracks,
+            detected_language: self.detected_language.clone(),
+            has_output: self.output_subtitle_path.is_some() || self.output_video_path.is_some(),
+            format_label: self.format_label(),
+            batches: self.batches.clone(),
+            elapsed_secs: self.elapsed_secs(),
+            eta_secs: self.eta_secs(),
+            can_retry: self.can_retry(),
+            has_unsaved_edits: self.has_unsaved_edits,
+        }
+    }
 }
 
 pub struct QueueState {
@@ -101,6 +222,23 @@ pub struct QueueChanged;
 
 impl EventEmitter<QueueChanged> for QueueState {}
 
+/// User-facing milestones, surfaced as toasts by the root view.
+pub enum QueueNotice {
+    FileCompleted {
+        name: String,
+        output: Option<String>,
+    },
+    FileFailed {
+        name: String,
+        error: String,
+    },
+    AllDone {
+        count: usize,
+    },
+}
+
+impl EventEmitter<QueueNotice> for QueueState {}
+
 enum WorkerEvent {
     Status {
         status: FileStatus,
@@ -115,6 +253,7 @@ enum WorkerEvent {
         index: usize,
         text: String,
     },
+    Batch(BatchUpdate),
     Original {
         file: SubtitleFile,
     },
@@ -163,6 +302,11 @@ impl QueueState {
             .iter()
             .filter(|f| f.status.is_processing())
             .count()
+    }
+
+    /// Lightweight view of the queue for list rendering.
+    pub fn summaries(&self) -> Vec<FileSummary> {
+        self.files.iter().map(QueueFile::summary).collect()
     }
 
     pub fn current_file(&self) -> Option<&QueueFile> {
@@ -232,14 +376,53 @@ impl QueueState {
             detected_language: None,
             output_subtitle_path: None,
             output_video_path: None,
+            batches: Vec::new(),
+            started_at: None,
+            finished_at: None,
+            has_unsaved_edits: false,
+            entry_slot: HashMap::new(),
         };
         self.files.push(file);
         if self.current_file_id.is_none() {
             self.current_file_id = Some(id.clone());
         }
-        if kind == FileKind::Video {
-            self.load_video_tracks(id, cx);
+        match kind {
+            FileKind::Video => self.load_video_tracks(id, cx),
+            // Parse subtitles up front so the editor can show them immediately.
+            FileKind::Subtitle => self.preload_subtitle(id, cx),
         }
+    }
+
+    fn preload_subtitle(&mut self, id: String, cx: &mut Context<Self>) {
+        let Some(path) = self.file(&id).map(|f| f.path.clone()) else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let loaded = cx
+                .background_spawn(async move { files::load_subtitle(&path) })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let Ok(subtitle) = loaded else {
+                    return;
+                };
+                if let Some(file) = this.file_mut(&id) {
+                    if file.original.is_some() {
+                        return;
+                    }
+                    file.total_lines = subtitle.entries.len();
+                    file.entry_slot = subtitle
+                        .entries
+                        .iter()
+                        .enumerate()
+                        .map(|(slot, entry)| (entry.index, slot))
+                        .collect();
+                    file.original = Some(subtitle);
+                }
+                cx.emit(QueueChanged);
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     pub fn select_file(&mut self, id: String, cx: &mut Context<Self>) {
@@ -302,13 +485,132 @@ impl QueueState {
         cx: &mut Context<Self>,
     ) {
         if let Some(file) = self.file_mut(file_id) {
-            if let Some(entries) = file.translated_entries.as_mut() {
-                if let Some(entry) = entries.iter_mut().find(|e| e.index == entry_index) {
+            let entries = file.translated_entries.get_or_insert_with(|| {
+                file.original
+                    .as_ref()
+                    .map(|s| s.entries.clone())
+                    .unwrap_or_default()
+            });
+            let slot = file
+                .entry_slot
+                .get(&entry_index)
+                .copied()
+                .or_else(|| entries.iter().position(|e| e.index == entry_index));
+            if let Some(entry) = slot.and_then(|slot| entries.get_mut(slot)) {
+                if entry.text != text {
                     entry.text = text;
+                    file.has_unsaved_edits = true;
                 }
             }
         }
+        cx.emit(QueueChanged);
         cx.notify();
+    }
+
+    /// Moves a file up or down the queue (`delta` is -1 or 1).
+    pub fn move_file(&mut self, id: &str, delta: isize, cx: &mut Context<Self>) {
+        let Some(from) = self.files.iter().position(|f| f.id == id) else {
+            return;
+        };
+        let to = from as isize + delta;
+        if to < 0 || to as usize >= self.files.len() {
+            return;
+        }
+        self.files.swap(from, to as usize);
+        cx.emit(QueueChanged);
+        cx.notify();
+    }
+
+    /// Puts a failed or cancelled file back in line.
+    pub fn requeue_file(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.cancel.reset(id);
+        if let Some(file) = self.file_mut(id) {
+            if !file.can_retry() {
+                return;
+            }
+            file.status = FileStatus::Pending;
+            file.error = None;
+            file.progress = 0.0;
+            file.translated_lines = 0;
+            file.translated_entries = None;
+            file.batches.clear();
+            file.started_at = None;
+            file.finished_at = None;
+        }
+        if self.is_translating && !self.is_paused {
+            self.pump(cx);
+        }
+        cx.emit(QueueChanged);
+        cx.notify();
+    }
+
+    /// Writes the (possibly hand-edited) translation back to disk.
+    pub fn save_translated(&mut self, id: &str, cx: &mut Context<Self>) {
+        let Some(file) = self.file(id).cloned() else {
+            return;
+        };
+        let Some(original) = file.original.clone() else {
+            return;
+        };
+        let Some(entries) = file.translated_entries.clone() else {
+            return;
+        };
+
+        let settings = match self.settings.upgrade() {
+            Some(entity) => entity.read(cx).settings.clone(),
+            None => return,
+        };
+
+        let mut subtitle = original;
+        subtitle.entries = entries;
+
+        let path = file.output_subtitle_path.clone().unwrap_or_else(|| {
+            output_subtitle_path(&file, &file.path, &settings, &subtitle.format)
+        });
+
+        let lang = self.language(cx);
+        match files::save_subtitle(&path, &subtitle) {
+            Ok(()) => {
+                if let Some(file) = self.file_mut(id) {
+                    file.output_subtitle_path = Some(path.clone());
+                    file.has_unsaved_edits = false;
+                }
+                self.log(
+                    cx,
+                    LogLevel::Success,
+                    i18n::tf(lang, "logMessages.subtitleSaved", &[("path", &path)]),
+                    Some(file.name.clone()),
+                );
+            }
+            Err(err) => self.log(
+                cx,
+                LogLevel::Error,
+                i18n::tf(
+                    lang,
+                    "logMessages.errorProcessing",
+                    &[("fileName", &file.name), ("error", &err)],
+                ),
+                Some(file.name.clone()),
+            ),
+        }
+        cx.emit(QueueChanged);
+        cx.notify();
+    }
+
+    /// Reveals a produced file in the system file manager.
+    pub fn reveal_output(&self, id: &str, cx: &Context<Self>) {
+        let Some(file) = self.file(id) else {
+            return;
+        };
+        let target = file
+            .output_video_path
+            .clone()
+            .or_else(|| file.output_subtitle_path.clone())
+            .unwrap_or_else(|| file.path.clone());
+        let _ = cx;
+        if let Some(parent) = Path::new(&target).parent() {
+            let _ = files::open_folder(parent);
+        }
     }
 
     pub fn start(&mut self, cx: &mut Context<Self>) {
@@ -423,7 +725,6 @@ impl QueueState {
 
         if active == 0 && pending.is_empty() {
             self.is_translating = false;
-            self.current_file_id = self.files.first().map(|f| f.id.clone());
             let lang = self.language(cx);
             self.log(
                 cx,
@@ -431,6 +732,12 @@ impl QueueState {
                 i18n::t(lang, "logMessages.allFilesProcessed"),
                 None,
             );
+            let count = self
+                .files
+                .iter()
+                .filter(|f| f.status == FileStatus::Completed)
+                .count();
+            cx.emit(QueueNotice::AllDone { count });
             cx.notify();
             return;
         }
@@ -453,6 +760,13 @@ impl QueueState {
                 FileStatus::Translating
             };
             file.error = None;
+            file.batches.clear();
+            file.progress = 0.0;
+            file.translated_lines = 0;
+            file.translated_entries = None;
+            file.started_at = Some(Instant::now());
+            file.finished_at = None;
+            file.has_unsaved_edits = false;
         }
         cx.notify();
 
@@ -470,9 +784,15 @@ impl QueueState {
             });
 
             while let Some(event) = rx.next().await {
+                // Streaming can emit hundreds of events per second; coalesce
+                // whatever is already queued into a single UI update.
+                let mut batch = vec![event];
+                while let Ok(next) = rx.try_recv() {
+                    batch.push(next);
+                }
                 let file_id = file_id.clone();
                 let _ = this.update(cx, |this, cx| {
-                    this.apply_event(&file_id, event, cx);
+                    this.apply_events(&file_id, batch, cx);
                 });
             }
 
@@ -483,6 +803,14 @@ impl QueueState {
         .detach();
     }
 
+    fn apply_events(&mut self, file_id: &str, events: Vec<WorkerEvent>, cx: &mut Context<Self>) {
+        for event in events {
+            self.apply_event(file_id, event, cx);
+        }
+        cx.emit(QueueChanged);
+        cx.notify();
+    }
+
     fn apply_event(&mut self, file_id: &str, event: WorkerEvent, cx: &mut Context<Self>) {
         match event {
             WorkerEvent::Status { status, error } => {
@@ -490,6 +818,31 @@ impl QueueState {
                     if file.status != FileStatus::Cancelled {
                         file.status = status;
                         file.error = error;
+                        if matches!(
+                            status,
+                            FileStatus::Completed | FileStatus::Error | FileStatus::Cancelled
+                        ) {
+                            file.finished_at = Some(Instant::now());
+                            if status != FileStatus::Completed {
+                                file.batches.clear();
+                            }
+                        }
+                    }
+                }
+                if let Some(file) = self.file(file_id) {
+                    match file.status {
+                        FileStatus::Completed => cx.emit(QueueNotice::FileCompleted {
+                            name: file.name.clone(),
+                            output: file
+                                .output_video_path
+                                .clone()
+                                .or_else(|| file.output_subtitle_path.clone()),
+                        }),
+                        FileStatus::Error => cx.emit(QueueNotice::FileFailed {
+                            name: file.name.clone(),
+                            error: file.error.clone().unwrap_or_default(),
+                        }),
+                        _ => {}
                     }
                 }
             }
@@ -504,6 +857,25 @@ impl QueueState {
                     file.total_lines = total;
                 }
             }
+            WorkerEvent::Batch(update) => {
+                if let Some(file) = self.file_mut(file_id) {
+                    if file.batches.len() <= update.index {
+                        file.batches
+                            .resize(update.index + 1, BatchProgress::default());
+                    }
+                    let slot = &mut file.batches[update.index];
+                    slot.total = update.total_in_batch;
+                    slot.done =
+                        update
+                            .completed_in_batch
+                            .max(if update.status == BatchStatus::Completed {
+                                update.total_in_batch
+                            } else {
+                                0
+                            });
+                    slot.status = update.status;
+                }
+            }
             WorkerEvent::Entry { index, text } => {
                 if let Some(file) = self.file_mut(file_id) {
                     let entries = file.translated_entries.get_or_insert_with(|| {
@@ -512,7 +884,11 @@ impl QueueState {
                             .map(|s| s.entries.clone())
                             .unwrap_or_default()
                     });
-                    if let Some(entry) = entries.iter_mut().find(|e| e.index == index) {
+                    if let Some(slot) = file.entry_slot.get(&index).copied() {
+                        if let Some(entry) = entries.get_mut(slot) {
+                            entry.text = text;
+                        }
+                    } else if let Some(entry) = entries.iter_mut().find(|e| e.index == index) {
                         entry.text = text;
                     }
                 }
@@ -520,6 +896,12 @@ impl QueueState {
             WorkerEvent::Original { file: subtitle } => {
                 if let Some(file) = self.file_mut(file_id) {
                     file.total_lines = subtitle.entries.len();
+                    file.entry_slot = subtitle
+                        .entries
+                        .iter()
+                        .enumerate()
+                        .map(|(slot, entry)| (entry.index, slot))
+                        .collect();
                     file.original = Some(subtitle);
                 }
             }
@@ -563,8 +945,6 @@ impl QueueState {
             }
             WorkerEvent::Done => {}
         }
-        cx.emit(QueueChanged);
-        cx.notify();
     }
 
     fn load_video_tracks(&mut self, id: String, cx: &mut Context<Self>) {
@@ -733,6 +1113,7 @@ async fn process_file(
     let tx_progress = tx.clone();
     let tx_entry = tx.clone();
     let tx_error = tx.clone();
+    let tx_batch = tx.clone();
     let file_name = file.name.clone();
     let callbacks = TranslationCallbacks {
         on_progress: Box::new(move |percent, done, total| {
@@ -744,6 +1125,9 @@ async fn process_file(
         }),
         on_entry: Box::new(move |index, text| {
             let _ = tx_entry.unbounded_send(WorkerEvent::Entry { index, text });
+        }),
+        on_batch: Arc::new(move |update| {
+            let _ = tx_batch.unbounded_send(WorkerEvent::Batch(update));
         }),
         on_error: Box::new(move |message, attempt| {
             let _ = tx_error.unbounded_send(WorkerEvent::Log {
@@ -820,7 +1204,8 @@ async fn process_file(
         error: None,
     });
 
-    let output_subtitle = output_subtitle_path(&file, &subtitle_path, &settings);
+    let output_subtitle =
+        output_subtitle_path(&file, &subtitle_path, &settings, &translated.format);
     if let Err(err) = files::save_subtitle(&output_subtitle, &translated) {
         fail(&tx, err);
         return;
@@ -955,18 +1340,30 @@ fn replace_extension(path: &str, suffix_and_ext: &str) -> String {
     }
 }
 
+/// Output keeps the source format: an SRT in stays an SRT out.
+fn output_extension(format: &SubtitleFormat) -> &'static str {
+    match format {
+        SubtitleFormat::Srt => "srt",
+        SubtitleFormat::Ssa => "ssa",
+        // VTT has no serializer yet, so it is written as ASS.
+        SubtitleFormat::Ass | SubtitleFormat::Vtt => "ass",
+    }
+}
+
 fn output_subtitle_path(
     file: &QueueFile,
     subtitle_path: &str,
     settings: &crate::core::settings::AppSettings,
+    format: &SubtitleFormat,
 ) -> String {
+    let suffix = format!("translated.{}", output_extension(format));
     if !settings.separate_output_dir.trim().is_empty() {
         let name = Path::new(&file.name)
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("subtitle");
         Path::new(&settings.separate_output_dir)
-            .join(format!("{name}.translated.ass"))
+            .join(format!("{name}.{suffix}"))
             .to_string_lossy()
             .into_owned()
     } else {
@@ -975,6 +1372,6 @@ fn output_subtitle_path(
         } else {
             subtitle_path
         };
-        replace_extension(base, "translated.ass")
+        replace_extension(base, &suffix)
     }
 }

@@ -1,4 +1,3 @@
-use futures::future::join_all;
 use futures::StreamExt;
 use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
@@ -211,6 +210,62 @@ pub struct TranslationBatchReport {
     pub translations: Vec<(usize, String)>,
     pub progress: TranslationProgress,
     pub error_message: Option<String>,
+}
+
+/// Lifecycle of a single batch while a file is being translated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum BatchStatus {
+    /// Queued, waiting for a free parallel slot.
+    #[default]
+    Pending,
+    /// Request in flight.
+    Active,
+    /// Every line of the batch came back translated.
+    Completed,
+    /// Batch gave up after exhausting the retries.
+    Error,
+}
+
+/// Telemetry for one batch, emitted while translating so the UI can draw
+/// a segment per parallel request instead of a single opaque bar.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchUpdate {
+    pub index: usize,
+    pub total_in_batch: usize,
+    pub completed_in_batch: usize,
+    pub status: BatchStatus,
+}
+
+impl BatchUpdate {
+    fn new(
+        index: usize,
+        total_in_batch: usize,
+        completed_in_batch: usize,
+        status: BatchStatus,
+    ) -> Self {
+        Self {
+            index,
+            total_in_batch,
+            completed_in_batch,
+            status,
+        }
+    }
+}
+
+/// Observer invoked from every in-flight batch, hence `Send + Sync`.
+pub type BatchObserver = Arc<dyn Fn(BatchUpdate) + Send + Sync>;
+
+/// Observer that does nothing, for callers that don't care about batch telemetry.
+pub fn noop_batch_observer() -> BatchObserver {
+    Arc::new(|_| {})
+}
+
+/// Backoff between retries: 1s, 2s, 4s, capped at 8s.
+fn retry_backoff(attempt: usize) -> std::time::Duration {
+    let secs = 1u64 << attempt.saturating_sub(1).min(3);
+    std::time::Duration::from_secs(secs.min(8))
 }
 
 /// Result of a batch translation operation
@@ -670,6 +725,7 @@ impl LlmClient {
 
     /// Translates a single batch with streaming (OpenAI format only)
     /// Emits events as each entry is translated
+    #[allow(clippy::too_many_arguments)]
     async fn translate_streaming_batch(
         &self,
         system_prompt: &str,
@@ -883,6 +939,7 @@ CRITICAL FORMAT INSTRUCTIONS:
         parallel_requests: usize,
         max_retries: usize,
         cancel_flag: Option<Arc<AtomicBool>>,
+        on_batch: BatchObserver,
         on_entry: impl FnMut(TranslatedEntryEvent) + Send + Clone,
     ) -> Result<Vec<(usize, String)>, String> {
         // Create map of original indices for ASS tag validation
@@ -898,63 +955,75 @@ CRITICAL FORMAT INSTRUCTIONS:
 
         let total_batches = batches.len();
         let mut batch_results: Vec<Option<Vec<(usize, String)>>> = vec![None; total_batches];
-        let mut current_batch_group = 0;
 
-        // Processa batches em grupos de parallel_requests
+        // Anuncia o plano de batches para a UI desenhar os segmentos.
+        for (idx, batch) in batches.iter().enumerate() {
+            on_batch(BatchUpdate::new(idx, batch.len(), 0, BatchStatus::Pending));
+        }
+
         check_cancelled(&cancel_flag)?;
-        while current_batch_group * parallel_requests < total_batches {
-            check_cancelled(&cancel_flag)?;
-            let start_idx = current_batch_group * parallel_requests;
-            let end_idx = (start_idx + parallel_requests).min(total_batches);
 
-            // Prepara futures para este grupo de batches
-            let mut futures = Vec::new();
-            for batch_idx in start_idx..end_idx {
-                if batch_results[batch_idx].is_none() {
-                    let batch = batches[batch_idx].clone();
-                    let cancel_flag = cancel_flag.clone();
-                    let original_map = &original_map;
-                    let mut on_entry_clone = on_entry.clone();
-
-                    futures.push(async move {
-                        let result = self
-                            .translate_streaming_batch(
-                                system_prompt,
-                                &batch,
-                                batch_idx,
-                                max_retries,
-                                cancel_flag,
-                                original_map,
-                                &mut on_entry_clone,
-                            )
-                            .await;
-                        (batch_idx, result)
-                    });
+        // Mantém sempre `parallel_requests` requisições em voo: assim que um
+        // batch termina, o próximo entra — sem esperar o grupo inteiro.
+        let original_map = &original_map;
+        let mut in_flight =
+            futures::stream::iter(batches.into_iter().enumerate().map(|(batch_idx, batch)| {
+                let cancel_flag = cancel_flag.clone();
+                let mut on_entry_clone = on_entry.clone();
+                let on_batch = on_batch.clone();
+                let batch_len = batch.len();
+                async move {
+                    on_batch(BatchUpdate::new(
+                        batch_idx,
+                        batch_len,
+                        0,
+                        BatchStatus::Active,
+                    ));
+                    let mut done_in_batch = 0usize;
+                    let result = self
+                        .translate_streaming_batch(
+                            system_prompt,
+                            &batch,
+                            batch_idx,
+                            max_retries,
+                            cancel_flag,
+                            original_map,
+                            &mut |event: TranslatedEntryEvent| {
+                                done_in_batch += 1;
+                                on_batch(BatchUpdate::new(
+                                    batch_idx,
+                                    batch_len,
+                                    done_in_batch,
+                                    BatchStatus::Active,
+                                ));
+                                on_entry_clone(event);
+                            },
+                        )
+                        .await;
+                    let status = match &result {
+                        Ok(entries) => {
+                            done_in_batch = entries.len();
+                            BatchStatus::Completed
+                        }
+                        Err(_) => BatchStatus::Error,
+                    };
+                    on_batch(BatchUpdate::new(
+                        batch_idx,
+                        batch_len,
+                        done_in_batch,
+                        status,
+                    ));
+                    (batch_idx, result)
                 }
-            }
+            }))
+            .buffer_unordered(parallel_requests);
 
-            if futures.is_empty() {
-                current_batch_group += 1;
-                continue;
+        while let Some((batch_idx, result)) = in_flight.next().await {
+            match result {
+                Ok(translations) => batch_results[batch_idx] = Some(translations),
+                Err(e) => return Err(e),
             }
-
-            // Executa batches em paralelo
-            let results = join_all(futures).await;
             check_cancelled(&cancel_flag)?;
-
-            // Processa resultados
-            for (batch_idx, result) in results {
-                match result {
-                    Ok(translations) => {
-                        batch_results[batch_idx] = Some(translations);
-                    }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
-            }
-
-            current_batch_group += 1;
         }
 
         // Coleta e ordena todos os resultados
@@ -1177,21 +1246,23 @@ CRITICAL FORMAT INSTRUCTIONS:
         mut on_progress: impl FnMut(TranslationProgress),
         mut on_retry: impl FnMut(TranslationRetryInfo),
         mut on_error: impl FnMut(TranslationErrorInfo),
+        mut on_entries: impl FnMut(&[(usize, String)]),
+        on_batch: BatchObserver,
     ) -> Result<TranslationBatchReport, String> {
         let total = entries.len();
         let parallel_requests = settings.parallel_requests.max(1);
+        let max_retries = settings.max_retries;
 
         // Divide entries em batches
         let batches: Vec<Vec<(usize, String)>> = entries
-            .chunks(settings.batch_size)
+            .chunks(settings.batch_size.max(1))
             .map(|chunk| chunk.to_vec())
             .collect();
 
         let total_batches = batches.len();
         let mut batch_results: Vec<Option<Vec<(usize, String)>>> = vec![None; total_batches];
-        let mut current_batch_group = 0;
 
-        let build_progress = |translations: &Vec<(usize, String)>| -> TranslationProgress {
+        let build_progress = |translations: &[(usize, String)]| -> TranslationProgress {
             let translated_entries = translations.len();
             let last_translated_index = translations.iter().map(|(idx, _)| *idx).max().unwrap_or(0);
             let is_partial = translated_entries < total;
@@ -1204,136 +1275,119 @@ CRITICAL FORMAT INSTRUCTIONS:
             }
         };
 
-        // Processa batches em grupos de parallel_requests
+        for (idx, batch) in batches.iter().enumerate() {
+            on_batch(BatchUpdate::new(idx, batch.len(), 0, BatchStatus::Pending));
+        }
+
         check_cancelled(&cancel_flag)?;
-        while current_batch_group * parallel_requests < total_batches {
-            check_cancelled(&cancel_flag)?;
-            let start_idx = current_batch_group * parallel_requests;
-            let end_idx = (start_idx + parallel_requests).min(total_batches);
 
-            // Prepara futures para este grupo de batches
-            let mut futures = Vec::new();
-            for batch_idx in start_idx..end_idx {
-                if batch_results[batch_idx].is_none() {
-                    let batch = batches[batch_idx].clone();
-                    futures.push(self.translate_single_batch(system_prompt, batch, batch_idx));
-                }
-            }
+        // Retries acontecem dentro do próprio batch: as tentativas de um batch
+        // lento não bloqueiam os outros slots paralelos.
+        let (retry_tx, mut retry_rx) =
+            futures::channel::mpsc::unbounded::<(usize, usize, String)>();
 
-            if futures.is_empty() {
-                current_batch_group += 1;
-                continue;
-            }
-
-            // Executa batches em paralelo
-            let results = join_all(futures).await;
-            check_cancelled(&cancel_flag)?;
-
-            // Processa resultados
-            let mut last_error: Option<String> = None;
-            let mut failed_batches: Vec<usize> = Vec::new();
-
-            for (batch_idx, result) in results {
-                match result {
-                    Ok(translations) => {
-                        batch_results[batch_idx] = Some(translations);
-                    }
-                    Err(e) => {
-                        last_error = Some(e.clone());
-                        failed_batches.push(batch_idx);
-                    }
-                }
-            }
-
-            // Retry para batches que falharam
-            for failed_idx in failed_batches {
-                let mut retries = 0;
-                loop {
-                    check_cancelled(&cancel_flag)?;
-                    retries += 1;
-
-                    // Calcula progresso atual para callback
-                    let current_translations: Vec<_> = batch_results
-                        .iter()
-                        .filter_map(|r| r.clone())
-                        .flatten()
-                        .collect();
-                    let progress = build_progress(&current_translations);
-
-                    if retries > settings.max_retries {
-                        let error_message = format!(
-                            "Translation failed after {} retries: {}",
-                            settings.max_retries,
-                            last_error.clone().unwrap_or_default()
-                        );
-                        let mut error_progress = progress.clone();
-                        error_progress.can_continue =
-                            settings.continue_on_error && error_progress.is_partial;
-
-                        on_error(TranslationErrorInfo {
-                            error_message: error_message.clone(),
-                            progress: error_progress.clone(),
-                        });
-
-                        if !settings.continue_on_error {
-                            // Coleta traduções bem-sucedidas
-                            let mut translations: Vec<(usize, String)> = batch_results
-                                .iter()
-                                .filter_map(|r| r.clone())
-                                .flatten()
-                                .collect();
-                            translations.sort_by_key(|(idx, _)| *idx);
-
-                            return Ok(TranslationBatchReport {
-                                translations,
-                                progress: error_progress,
-                                error_message: Some(error_message),
-                            });
+        let mut in_flight =
+            futures::stream::iter(batches.into_iter().enumerate().map(|(batch_idx, batch)| {
+                let cancel_flag = cancel_flag.clone();
+                let on_batch = on_batch.clone();
+                let retry_tx = retry_tx.clone();
+                let batch_len = batch.len();
+                async move {
+                    on_batch(BatchUpdate::new(
+                        batch_idx,
+                        batch_len,
+                        0,
+                        BatchStatus::Active,
+                    ));
+                    let mut attempt = 0usize;
+                    loop {
+                        if let Err(err) = check_cancelled(&cancel_flag) {
+                            return (batch_idx, Err(err));
                         }
-
-                        // Se continue_on_error, deixa o batch como None e continua
-                        break;
+                        match self.translate_subtitles(system_prompt, &batch).await {
+                            Ok(translations) => {
+                                on_batch(BatchUpdate::new(
+                                    batch_idx,
+                                    batch_len,
+                                    translations.len(),
+                                    BatchStatus::Completed,
+                                ));
+                                return (batch_idx, Ok(translations));
+                            }
+                            Err(err) => {
+                                if err.contains(TRANSLATION_CANCELLED_ERROR) {
+                                    return (batch_idx, Err(err));
+                                }
+                                attempt += 1;
+                                if attempt > max_retries {
+                                    on_batch(BatchUpdate::new(
+                                        batch_idx,
+                                        batch_len,
+                                        0,
+                                        BatchStatus::Error,
+                                    ));
+                                    return (batch_idx, Err(err));
+                                }
+                                let _ = retry_tx.unbounded_send((batch_idx, attempt, err));
+                                tokio::time::sleep(retry_backoff(attempt)).await;
+                            }
+                        }
                     }
+                }
+            }))
+            .buffer_unordered(parallel_requests);
 
-                    on_retry(TranslationRetryInfo {
-                        attempt: retries,
-                        max_retries: settings.max_retries,
-                        error_message: last_error.clone().unwrap_or_default(),
+        let mut error_message: Option<String> = None;
+        let mut cancelled = false;
+
+        while let Some((batch_idx, result)) = in_flight.next().await {
+            let collected = |results: &[Option<Vec<(usize, String)>>]| -> Vec<(usize, String)> {
+                results.iter().flatten().flatten().cloned().collect()
+            };
+
+            // Repassa as tentativas de retry que aconteceram enquanto esperávamos.
+            while let Ok((idx, attempt, message)) = retry_rx.try_recv() {
+                on_retry(TranslationRetryInfo {
+                    attempt,
+                    max_retries,
+                    error_message: format!("Batch {}: {}", idx + 1, message),
+                    progress: build_progress(&collected(&batch_results)),
+                });
+            }
+
+            match result {
+                Ok(translations) => {
+                    // Hand the finished lines to the UI right away instead of
+                    // waiting for the whole file.
+                    on_entries(&translations);
+                    batch_results[batch_idx] = Some(translations);
+                }
+                Err(err) if err.contains(TRANSLATION_CANCELLED_ERROR) => {
+                    cancelled = true;
+                    break;
+                }
+                Err(err) => {
+                    let message = format!("Batch {}: {}", batch_idx + 1, err);
+                    let mut progress = build_progress(&collected(&batch_results));
+                    progress.can_continue = settings.continue_on_error && progress.is_partial;
+                    on_error(TranslationErrorInfo {
+                        error_message: message.clone(),
                         progress,
                     });
+                    error_message = Some(message);
 
-                    // Delay antes de retry
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-                    check_cancelled(&cancel_flag)?;
-
-                    // Tenta novamente
-                    let batch = batches[failed_idx].clone();
-                    match self.translate_subtitles(system_prompt, &batch).await {
-                        Ok(translations) => {
-                            batch_results[failed_idx] = Some(translations);
-                            break;
-                        }
-                        Err(e) => {
-                            last_error = Some(e);
-                        }
+                    if !settings.continue_on_error || !settings.auto_continue {
+                        break;
                     }
                 }
             }
 
-            // Atualiza progresso após cada grupo
-            let current_translations: Vec<_> = batch_results
-                .iter()
-                .filter_map(|r| r.clone())
-                .flatten()
-                .collect();
-            let progress = build_progress(&current_translations);
-            on_progress(progress.clone());
+            on_progress(build_progress(&collected(&batch_results)));
+        }
+        drop(in_flight);
 
-            if !settings.auto_continue && progress.is_partial {
-                break;
-            }
-
-            current_batch_group += 1;
+        if cancelled {
+            return Err(TRANSLATION_CANCELLED_ERROR.to_string());
         }
 
         // Coleta e ordena todas as traduções
@@ -1342,10 +1396,11 @@ CRITICAL FORMAT INSTRUCTIONS:
         all_translations.sort_by_key(|(idx, _)| *idx);
 
         let progress = build_progress(&all_translations);
+        on_progress(progress.clone());
         Ok(TranslationBatchReport {
             translations: all_translations,
             progress,
-            error_message: None,
+            error_message,
         })
     }
 }
